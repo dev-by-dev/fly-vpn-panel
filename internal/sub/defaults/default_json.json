@@ -1,0 +1,149 @@
+{
+  "dns": {
+    "servers": [
+      "1.1.1.1",
+      "1.0.0.1"
+    ],
+    "queryStrategy": "UseIP"
+  },
+  "routing": {
+    "rules": [
+      {
+        "type": "field",
+        "domain": [
+          "ext:geosite.dat:category-ads-all",
+          "full:ads.youtube.com",
+          "full:ads.ytimg.com",
+          "full:pagead2.googlesyndication.com",
+          "full:tpc.googlesyndication.com",
+          "full:video-ad-stats.googlesyndication.com",
+          "full:googleads.g.doubleclick.net",
+          "full:ad.doubleclick.net",
+          "full:googleadservices.com",
+          "full:adservice.google.com",
+          "full:app-measurement.com"
+        ],
+        "outboundTag": "block"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "regexp:\\.ru$",
+          "regexp:\\.su$",
+          "regexp:\\.xn--p1ai$",
+          "domain:vk.com",
+          "domain:vkvideo.ru",
+          "domain:vkcompany.ru",
+          "domain:userapi.com",
+          "domain:yandex.net",
+          "domain:yandex.cloud",
+          "domain:okcdn.ru",
+          "domain:mycdn.me",
+          "domain:2gis.ru",
+          "domain:2gis.com",
+          "domain:kudago.com",
+          "domain:fastpic.org",
+          "domain:imgsrc.ru"
+        ],
+        "outboundTag": "direct"
+      },
+      {
+        "ip": [
+          "geoip:ru"
+        ],
+        "type": "field",
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "protocol": [
+          "bittorrent"
+        ],
+        "outboundTag": "direct"
+      }
+    ],
+    "domainMatcher": "hybrid",
+    "domainStrategy": "IPIfNonMatch"
+  },
+  "inbounds": [
+    {
+      "tag": "socks",
+      "port": 10808,
+      "listen": "127.0.0.1",
+      "protocol": "socks",
+      "settings": {
+        "udp": true,
+        "auth": "noauth"
+      },
+      "sniffing": {
+        "enabled": true,
+        "routeOnly": false,
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ]
+      }
+    },
+    {
+      "tag": "http",
+      "port": 10809,
+      "listen": "127.0.0.1",
+      "protocol": "http",
+      "settings": {
+        "allowTransparent": false
+      },
+      "sniffing": {
+        "enabled": true,
+        "routeOnly": false,
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ]
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "{{TAG}}",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "{{ADDRESS}}",
+            "port": {{PORT}},
+            "users": [
+              {
+                "id": "{{UUID}}",
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "{{SNI}}",
+          "fingerprint": "{{FP}}",
+          "publicKey": "{{PBK}}",
+          "shortId": "{{SID}}"
+        },
+        "xhttpSettings": {
+          "path": "{{PATH}}",
+          "mode": "{{MODE}}"
+        }
+      }
+    },
+    {
+      "tag": "direct",
+      "protocol": "freedom"
+    },
+    {
+      "tag": "block",
+      "protocol": "blackhole"
+    }
+  ]
+}

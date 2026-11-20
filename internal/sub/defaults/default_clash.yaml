@@ -1,0 +1,110 @@
+mixed-port: 7890
+socks-port: 7891
+redir-port: 7892
+allow-lan: true
+mode: rule
+log-level: info
+ipv6: false
+external-controller: 127.0.0.1:9090
+sniffer:
+  enable: true
+  override-destination: true
+  sniff:
+    TLS:
+      ports: [443, 8443]
+    QUIC:
+      ports: [443]
+    HTTP:
+      ports: [80, 8080-8880]
+dns:
+  enable: true
+  ipv6: false
+  use-hosts: true
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  default-nameserver:
+    - 1.1.1.1
+    - 8.8.8.8
+  nameserver:
+    - 1.1.1.1
+    - 8.8.8.8
+  fake-ip-filter:
+    - '*.lan'
+    - stun.*.*.*
+    - stun.*.*
+    - time.windows.com
+    - time.nist.gov
+    - time.apple.com
+    - time.asia.apple.com
+    - '*.openwrt.pool.ntp.org'
+    - pool.ntp.org
+    - ntp.ubuntu.com
+    - time1.apple.com
+    - time2.apple.com
+    - time3.apple.com
+    - time4.apple.com
+    - time5.apple.com
+    - time6.apple.com
+    - time7.apple.com
+    - time1.google.com
+    - time2.google.com
+    - time3.google.com
+    - time4.google.com
+    - api.joox.com
+    - joox.com
+    - '*.xiami.com'
+    - '*.msftconnecttest.com'
+    - '*.msftncsi.com'
+    - '+.xboxlive.com'
+    - '*.*.stun.playstation.net'
+    - xbox.*.*.microsoft.com
+    - '*.ipv6.microsoft.com'
+    - speedtest.cros.wr.pvp.net
+
+proxies:
+{{PROXIES}}
+
+proxy-groups:
+  - name: 'proxy'
+    type: 'select'
+    proxies: {{PROXY_NAMES}}
+
+rule-providers:
+  reject-ads:
+    type: http
+    behavior: domain
+    format: yaml
+    url: "https://anti-ad.net/clash.yaml"
+    path: ./ruleset/anti-ad.yaml
+    interval: 86400
+rules:
+  - RULE-SET,reject-ads,REJECT
+  - DOMAIN-SUFFIX,ads.youtube.com,REJECT
+  - DOMAIN-SUFFIX,ads.ytimg.com,REJECT
+  - DOMAIN-SUFFIX,pagead2.googlesyndication.com,REJECT
+  - DOMAIN-SUFFIX,tpc.googlesyndication.com,REJECT
+  - DOMAIN-SUFFIX,video-ad-stats.googlesyndication.com,REJECT
+  - DOMAIN-SUFFIX,googleads.g.doubleclick.net,REJECT
+  - DOMAIN-SUFFIX,ad.doubleclick.net,REJECT
+  - DOMAIN-SUFFIX,googleadservices.com,REJECT
+  - DOMAIN-SUFFIX,adservice.google.com,REJECT
+  - DOMAIN-SUFFIX,app-measurement.com,REJECT
+  - DOMAIN-SUFFIX,ru,DIRECT
+  - DOMAIN-SUFFIX,su,DIRECT
+  - DOMAIN-SUFFIX,xn--p1ai,DIRECT
+  - DOMAIN-SUFFIX,vk.com,DIRECT
+  - DOMAIN-SUFFIX,userapi.com,DIRECT
+  - DOMAIN-SUFFIX,yandex.net,DIRECT
+  - DOMAIN-SUFFIX,yandex.cloud,DIRECT
+  - DOMAIN-SUFFIX,mycdn.me,DIRECT
+  - DOMAIN-SUFFIX,2gis.com,DIRECT
+  - DOMAIN-SUFFIX,kudago.com,DIRECT
+  - DOMAIN-SUFFIX,fastpic.org,DIRECT
+  - IP-CIDR,91.108.4.0/22,proxy,no-resolve
+  - IP-CIDR,91.108.8.0/21,proxy,no-resolve
+  - IP-CIDR,91.108.16.0/20,proxy,no-resolve
+  - IP-CIDR,91.108.56.0/22,proxy,no-resolve
+  - IP-CIDR,149.154.160.0/20,proxy,no-resolve
+  - IP-CIDR,95.161.64.0/20,proxy,no-resolve
+  - GEOIP,RU,DIRECT
+  - MATCH,proxy
