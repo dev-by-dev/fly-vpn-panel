@@ -404,7 +404,9 @@ func (h *Handlers) Delete(w http.ResponseWriter, r *http.Request) {
 // ResetQuota serves POST /api/users/{id}/reset-quota: the quota window
 // restarts at the current period start (usage sums samples from
 // quota_reset_at, so older usage stops counting), and a quota-disabled
-// user is re-enabled.
+// user is re-enabled. For period none there is no period start, so the
+// window restarts at "now" — the zero time would keep counting
+// lifetime usage and the poller would re-disable on the next tick.
 func (h *Handlers) ResetQuota(w http.ResponseWriter, r *http.Request) {
 	id, err := userID(r)
 	if err != nil {
@@ -420,7 +422,11 @@ func (h *Handlers) ResetQuota(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, "internal")
 		return
 	}
-	u.QuotaResetAt = periodStart(time.Now().UTC(), u.QuotaPeriod)
+	if u.QuotaPeriod == "none" {
+		u.QuotaResetAt = time.Now().UTC()
+	} else {
+		u.QuotaResetAt = periodStart(time.Now().UTC(), u.QuotaPeriod)
+	}
 	if u.Disabled && u.DisabledReason == "quota" {
 		u.Disabled = false
 		u.DisabledReason = ""

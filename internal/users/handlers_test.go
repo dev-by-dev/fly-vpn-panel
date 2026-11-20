@@ -300,6 +300,62 @@ func TestResetQuota(t *testing.T) {
 	}
 }
 
+func TestResetQuotaNonePeriod(t *testing.T) {
+	fc := &fakeClient{}
+	st, srv := newTestServer(t, fc)
+	seedInbound(t, st, "in-a", true)
+
+	// period none + quota: usage is lifetime (reset_at zero), so the
+	// poller disabled ivy once the samples crossed the quota.
+	u := createUserViaAPI(t, srv,
+		`{"username":"ivy","expiry":"2027-06-01T00:00:00Z","quota_bytes":100}`)
+	old := time.Now().UTC()
+	if err := st.SampleInsert("ivy", old.Add(-time.Hour), 60, 60); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UserSetDisabled(u.ID, true, "quota"); err != nil {
+		t.Fatal(err)
+	}
+
+	before := time.Now().UTC()
+	rec := doJSON(t, srv, "POST", "/api/users/"+strconv.FormatInt(u.ID, 10)+"/reset-quota", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rec.Code, rec.Body.String())
+	}
+	after := time.Now().UTC()
+	var got apiUser
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Disabled {
+		t.Fatal("reset-quota must re-enable a quota-disabled user")
+	}
+	// none has no period start: the window must restart at ~now, not
+	// at the zero time (which would keep counting lifetime usage).
+	if got.QuotaResetAt.Before(before) || got.QuotaResetAt.After(after) {
+		t.Fatalf("quota_reset_at = %s, want within [%s, %s]",
+			got.QuotaResetAt, before, after)
+	}
+	if got.UsedBytes != 0 {
+		t.Fatalf("used_bytes = %d, want 0 (pre-reset samples no longer count)", got.UsedBytes)
+	}
+	if _, ok := fc.members["in-a"]["ivy"]; !ok {
+		t.Fatal("re-enabled user not a member of the enabled inbound")
+	}
+
+	// The poller recomputes usage since the new reset_at (= 0 here)
+	// and must not re-disable the user.
+	db, err := st.UserGet(u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range Decide(*db, got.UsedBytes, nil, time.Now().UTC()) {
+		if a.Type == "disable" {
+			t.Fatalf("Decide re-disables after reset: %+v", a)
+		}
+	}
+}
+
 func TestSyncFailureReturns502(t *testing.T) {
 	fc := &fakeClient{failAddTag: "in-a"}
 	st, srv := newTestServer(t, fc)

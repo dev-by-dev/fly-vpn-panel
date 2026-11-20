@@ -234,8 +234,11 @@ func TestNextBoundary(t *testing.T) {
 	}
 }
 
-// fakeClient is an in-memory MemberSync: adding an existing member is a
-// no-op (like xray) and removing a missing member is a no-op too.
+// fakeClient is an in-memory MemberSync mirroring the *xrayclient.Client
+// contract: adding an existing member and removing a missing member are
+// no-ops (the client layer swallows xray's "already exists" and
+// "User not found." errors); other errors pass through raw, as xray
+// returns them.
 type fakeClient struct {
 	members     map[string]map[string]string // tag -> email -> uuid
 	addCalls    []string                     // "tag|email"

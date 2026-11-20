@@ -20,8 +20,9 @@ import (
 // mirroring real server semantics (see app/stats/command/command.go
 // and app/proxyman/command/command.go in xray-core): QueryStats matches
 // by substring, GetStatsOnlineIpList returns NotFound for an unknown
-// online map, AlterInbound applies the decoded operation and a
-// duplicate AddUser fails with "already exists".
+// online map, AlterInbound applies the decoded operation, a
+// duplicate AddUser fails with "already exists", and removing an
+// absent user fails with "not found.".
 type fakeXray struct {
 	statscmd.UnimplementedStatsServiceServer
 	handlercmd.UnimplementedHandlerServiceServer
@@ -89,6 +90,10 @@ func (f *fakeXray) AlterInbound(ctx context.Context, req *handlercmd.AlterInboun
 		}
 		f.users[op.User.Email] = true
 	case *handlercmd.RemoveUserOperation:
+		if !f.users[op.Email] {
+			// real xray: proxy/vless/validator.go "User <email> not found."
+			return nil, status.Error(codes.Unknown, "User "+op.Email+" not found.")
+		}
 		delete(f.users, op.Email)
 	}
 	return &handlercmd.AlterInboundResponse{}, nil
