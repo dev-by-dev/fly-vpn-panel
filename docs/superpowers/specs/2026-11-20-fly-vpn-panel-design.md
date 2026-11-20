@@ -133,8 +133,8 @@
 
 ### 6.7 Видимость и статистика (главная фича)
 - Поллер gRPC раз в 30 с (конфигурируемо):
-  - `QueryStats` per-user uplink/downlink (паттерн `user>>><email>>>>traffic>>>uplink`, reset=false) → дельты в SQLite.
-  - `GetAllOnlineUsers` + `GetStatsOnlineIpList` per-user → онлайн-IP + last-seen. **Семантику методов проверить при имплементации** (proto из main, релиз v26.11.9); fallback если API не даст IP — парсинг access log xray (только тогда).
+  - `QueryStats` per-user uplink/downlink (паттерн `user>>><email>>>traffic>>>uplink`, reset=false; 3 стрелки — проверено по исходникам v26.11.9) → дельты в SQLite.
+  - `GetAllOnlineUsers` + `GetStatsOnlineIpList` per-user → онлайн-IP + last-seen. **Семантика подтверждена по исходникам v26.11.9 (T5):** GetStatsOnlineIpList → per-user IP (map `user>>>email>>>online`), GetAllOnlineUsers → online emails. Fallback access-log не нужен.
 - SQLite: `traffic_samples(user, ts, up_delta, down_delta)` → агрегаты день/неделя/месяц + периодный счётчик квоты; `devices(user, ip, first_seen, last_seen)`.
 - Enforcement на поллинге: квота / device_limit / expiry (§6.2) → горячий RemoveUser + disabled_reason; авто-возврат по условиям §6.2.
 - Счётчики xray сбрасываются при рестарте — дельты фиксируются часто (поллинг 30 с), потеря ≤ интервала.
@@ -183,7 +183,7 @@
 
 - Раскладка Go-пакетов, инструмент миграций, метод генерации Reality-ключей (xray x25519 subprocess vs Go crypto), npm-либы QR/графиков, тюнинг поллинга, точный синтаксис Caddy-блока и systemd-hardening, детали тест-стратегии.
 - `.gitignore` создан в корне репо (секреты, БД, бинарники, логи, бэкапы, артефакты сборки) — расширять по мере надобности.
-- Проверка семантики GetStatsOnlineIpList/GetAllOnlineUsers в v26.11.9 при имплементации (§6.7).
+- Проверка семантики GetStatsOnlineIpList/GetAllOnlineUsers — **выполнено (T5, §6.7)**: per-user IP подтверждены по исходникам v26.11.9.
 - Версии npm могли уплыть к моменту установки — пинить при старте имплементации.
 - Механика периодного счётчика квоты (колонка vs агрегат из samples) — деталь схемы.
 

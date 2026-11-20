@@ -6,7 +6,7 @@
 
 **Architecture:** Go stdlib net/http + SQLite (WAL) = source of truth; xray v26.11.9 — дочерний процесс, конфиг генерится из БД; структурные правки через `xray run -test` → атомарная запись → рестарт child; юзеры/квоты/expiry — горячо через gRPC AlterInbound; поллер 30 с собирает трафик и онлайн-IP из xray stats API и применяет enforcement. SPA (Svelte 5) вшивается через embed.FS. Деплой — на выделенной VPS (ADR-0008) за поддоменом собственного нативного Caddy, VPN — Reality на своём порту.
 
-**Tech Stack:** Go ≥1.22 (stdlib mux), modernc.org/sqlite v1.62.0, github.com/xtls/xray-core v26.11.9 (gRPC-типы), golang-jwt/jwt v5.3.1, pquerna/otp v1.5.0, golang.org/x/crypto (argon2), google/uuid v1.6.0; Svelte 5.59 + Vite 8.3.8 + @sveltejs/vite-plugin-svelte 7.3.1 + Tailwind 4.3.5 + shadcn-svelte 1.8.1, svelte-spa-router, qrcode (QR), uPlot (графики), vitest.
+**Tech Stack:** Go ≥1.22 (stdlib mux), modernc.org/sqlite v1.62.0, github.com/xtls/xray-core v26.11.9 (gRPC-типы; Go-пин = pseudo-version `v1.260327.1-0.20261109052709-676eaf66f8f0` — module path без `/v26`, literal tag невалиден для Go modules; commit = tag v26.11.9, проверено ls-remote), golang-jwt/jwt v5.3.1, pquerna/otp v1.5.0, golang.org/x/crypto (argon2), google/uuid v1.6.0; Svelte 5.59 + Vite 8.3.8 + @sveltejs/vite-plugin-svelte 7.3.1 + Tailwind 4.3.5 + shadcn-svelte 1.8.1, svelte-spa-router, qrcode (QR), uPlot (графики), vitest.
 
 **Spec:** `docs/superpowers/specs/2026-11-20-fly-vpn-panel-design.md` (одобрен 2026-11-20). ADR: `docs/adr/` 0001–0008 accepted (0001 amended by 0008).
 
@@ -16,7 +16,7 @@
 - Ветки `<фича>-20261120-NN` от `dev`, слияние в `dev`. Каждый Task = своя ветка (указана в заголовке).
 - Go ≥1.22, HTTP-роутер stdlib `net/http` (patterns Go 1.22+). Фреймворк не нужен.
 - SQLite DSN: `_journal_mode=WAL&_busy_timeout=5000&_synchronous=FULL` (modernc v1.62.0 распознаёт только `_synchronous`/`_sync`; голый `synchronous=` молча игнорируется — проверено по исходникам драйвера, Task 1). Один писатель. Бэкап ежедневный, 7 копий.
-- xray **v26.11.9** (пин). API inbound dokodemo-door `127.0.0.1:10811` tag `api`. Policy level 0: `statsUserUplink/statsUserDownlink/statsUserOnline = true`.
+- xray **v26.11.9** (пин; Go-модуль: pseudo-version `v1.260327.1-0.20261109052709-676eaf66f8f0` = exact commit tag'а, module path без `/v26`). API inbound dokodemo-door `127.0.0.1:10811` tag `api`. Policy level 0: `statsUserUplink/statsUserDownlink/statsUserOnline = true`.
 - VPN: VLESS+XHTTP+Reality `0.0.0.0:8443`; вход `<ENTRY_IP>`; freedom `sendThrough <EGRESS_IP>` только если EGRESS_IP задан (выделенная VPS: один IP, поле опущено). Reality dest дефолт `www.microsoft.com:443`, path `/xhttp`, mode `stream-up`, fp `chrome`.
 - Панель bind: `127.0.0.1:3002` (прод и dev; LISTEN_ADDR из .env). Выделенная VPS (ADR-0008): 1 vCPU / 1 GB / 10 GB, Ubuntu 24.04, один IP (вход=выход), swap 2 GB создать при деплое, Docker не нужен, Caddy нативный. Агент провайдера (8080/8189) не трогать.
 - Auth: один админ, CLI `flypanel admin init`, публичной регистрации НЕТ. argon2id. JWT access 15 мин + refresh 7 дней, httpOnly cookies SameSite=Strict, refresh в БД с отзывом. TOTP опционально → обязателен после включения; 10 backup-кодов (хеши, одноразовые); отключение только с действующим кодом. Rate limit логина 5/мин/IP.
@@ -180,19 +180,19 @@ git add -A && git commit -m "feat: scaffold, config, sqlite core + schema v1"
 **Files:**
 - Create: `internal/xrayclient/client.go`, `internal/xrayclient/fake_test.go`
 - Test: `internal/xrayclient/client_test.go`
-- Modify: `go.mod` (+ `github.com/xtls/xray-core v26.11.9`, `google.golang.org/grpc`)
+- Modify: `go.mod` (+ `github.com/xtls/xray-core` pseudo-version `v1.260327.1-0.20261109052709-676eaf66f8f0` = tag v26.11.9, `google.golang.org/grpc`)
 
 **Interfaces:**
 - Consumes: xray-core модуль (типы `app/stats/command`, `app/proxyman/command`), конфиг с api inbound (Task 3)
 - Produces:
   - `New(addr string) (*Client, error)` — grpc.NewClient insecure (loopback).
-  - `(*Client).QueryUserStats(email string) (up, down int64, err error)` — QueryStats паттерны `user>>><email>>>>traffic>>>uplink` / `…downlink`, `Reset_: false`; отсутствующий счётчик → 0.
+  - `(*Client).QueryUserStats(email string) (up, down int64, err error)` — QueryStats паттерны `user>>><email>>>traffic>>>uplink` / `…downlink` (3 стрелки — проверено по исходникам v26.11.9, T5), `Reset_: false`; отсутствующий счётчик → 0.
   - `(*Client).OnlineUsers() ([]string, error)` — GetAllOnlineUsers.
   - `(*Client).OnlineIPs(email string) ([]string, error)` — GetStatsOnlineIpList.
   - `(*Client).AddUser(inboundTag, uuid, email string) error` / `RemoveUser(inboundTag, email string) error` — AlterInbound AddUserOperation/RemoveUserOperation (user level 0); ошибка «already exists» → nil (идемпотентность).
   - `(*Client).Close() error`.
 
-- [ ] **Step 1: Проверить семантику (spec §6.7).** Прочитать исходники xray-core v26.11.9 (`app/stats/command/command.go`, `app/proxyman/command/command.go`): подтвердить что GetStatsOnlineIpList возвращает IP по юзеру и GetAllOnlineUsers — список email онлайн; зафиксировать вывод в commit message. Если методы не дают IP — СТОП, сообщить оператору (fallback access-log — отдельное решение, не молча).
+- [ ] **Step 1: Проверить семантику (spec §6.7).** Прочитать исходники xray-core v26.11.9 (`app/stats/command/command.go`, `app/proxyman/command/command.go`): подтвердить что GetStatsOnlineIpList возвращает IP по юзеру и GetAllOnlineUsers — список email онлайн; зафиксировать вывод в commit message. Если методы не дают IP — СТОП, сообщить оператору (fallback access-log — отдельное решение, не молча). **Проверено (T5): PASSED** — GetStatsOnlineIpList возвращает per-user IP (map `user>>>email>>>online`), GetAllOnlineUsers — online emails; источник: module cache v26.11.9.
 - [ ] **Step 2: Падающие тесты** — bufconn fake-сервер (`fake_test.go` реализует StatsServiceServer + HandlerServiceServer): `TestQueryUserStats` (паттерны точные, reset=false, up/down маппятся; отсутствующий → 0); `TestOnlineUsers`; `TestOnlineIPs`; `TestAddRemoveUser` (AlterInbound получает верный tag/operation; already-exists → nil).
 - [ ] **Step 3: FAIL**
 - [ ] **Step 4: Реализовать**
