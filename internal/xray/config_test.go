@@ -34,9 +34,9 @@ const testInboundJSON = `{
     "xhttpSettings": {"path": "/xhttp", "mode": "stream-up"},
     "realitySettings": {
       "show": false,
-      "dest": "www.example.com:443",
+      "dest": "www.microsoft.com:443",
       "xver": 0,
-      "serverNames": ["www.example.com"],
+      "serverNames": ["www.microsoft.com"],
       "privateKey": "` + testRealityPriv + `",
       "shortIds": ["0123456789abcdef"]
     }
