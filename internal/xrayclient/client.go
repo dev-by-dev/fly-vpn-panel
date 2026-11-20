@@ -149,6 +149,10 @@ func (c *Client) AddUser(inboundTag, uuid, email string) error {
 }
 
 // RemoveUser removes the user with the given email from the inbound.
+// Removing a user that is not on the inbound is a no-op (idempotent),
+// matching xray's "User <email> not found." error: membership
+// reconcile removes every disabled user on every tick, so a
+// pass-through error would fail every sync after the first removal.
 func (c *Client) RemoveUser(inboundTag, email string) error {
 	operation := &handlercmd.RemoveUserOperation{Email: email}
 	ctx, cancel := ctx()
@@ -157,9 +161,21 @@ func (c *Client) RemoveUser(inboundTag, email string) error {
 		Tag:       inboundTag,
 		Operation: serial.ToTypedMessage(operation),
 	})
+	if err != nil && isNotFound(err) {
+		return nil
+	}
 	return err
 }
 
 func isAlreadyExists(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "already exists")
+}
+
+// isNotFound matches xray's "User <email> not found." AlterInbound
+// error, delivered as codes.Unknown so the message text is the only
+// signal. Requiring the "user" subject keeps handler/tag-level
+// "not found" errors (failed to get handler: <tag>) passing through.
+func isNotFound(err error) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "user ") && strings.Contains(msg, " not found")
 }

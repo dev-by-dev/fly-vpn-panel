@@ -180,3 +180,21 @@ func TestAddRemoveUser(t *testing.T) {
 		t.Errorf("remove: email = %q, want user1@example.com", rmOp.Email)
 	}
 }
+
+// Removing a user that is not on the inbound must be a no-op: xray
+// answers "User <email> not found." (codes.Unknown), and membership
+// reconcile removes every disabled user on every tick, so a
+// pass-through error would fail every sync after the first removal.
+func TestRemoveUserMissingIsNoOp(t *testing.T) {
+	f := &fakeXray{}
+	c := newBufconnClient(t, f)
+
+	if err := c.RemoveUser("vpn-in", "ghost@example.com"); err != nil {
+		t.Fatalf("remove of missing user: %v", err)
+	}
+
+	// The RPC was still issued (the server did the rejecting).
+	if len(f.alterReqs) != 1 || f.alterReqs[0].Tag != "vpn-in" {
+		t.Fatalf("alterReqs = %+v, want exactly one remove on vpn-in", f.alterReqs)
+	}
+}
