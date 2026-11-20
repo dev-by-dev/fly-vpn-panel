@@ -4,27 +4,27 @@
 
 **Goal:** Один Go-бинарник `flypanel` (SPA внутри) + дочерний xray: полная панель управления VPN (VLESS+XHTTP+Reality) с юзерами, квотами, подписками и видимостью «кто онлайн + сколько трафика».
 
-**Architecture:** Go stdlib net/http + SQLite (WAL) = source of truth; xray v26.11.9 — дочерний процесс, конфиг генерится из БД; структурные правки через `xray run -test` → атомарная запись → рестарт child; юзеры/квоты/expiry — горячо через gRPC AlterInbound; поллер 30 с собирает трафик и онлайн-IP из xray stats API и применяет enforcement. SPA (Svelte 5) вшивается через embed.FS. Деплой — за поддоменом существующего Caddy, VPN — Reality на своём порту.
+**Architecture:** Go stdlib net/http + SQLite (WAL) = source of truth; xray v26.11.9 — дочерний процесс, конфиг генерится из БД; структурные правки через `xray run -test` → атомарная запись → рестарт child; юзеры/квоты/expiry — горячо через gRPC AlterInbound; поллер 30 с собирает трафик и онлайн-IP из xray stats API и применяет enforcement. SPA (Svelte 5) вшивается через embed.FS. Деплой — на выделенной VPS (ADR-0008) за поддоменом собственного нативного Caddy, VPN — Reality на своём порту.
 
 **Tech Stack:** Go ≥1.22 (stdlib mux), modernc.org/sqlite v1.62.0, github.com/xtls/xray-core v26.11.9 (gRPC-типы), golang-jwt/jwt v5.3.1, pquerna/otp v1.5.0, golang.org/x/crypto (argon2), google/uuid v1.6.0; Svelte 5.59 + Vite 8.3.8 + @sveltejs/vite-plugin-svelte 7.3.1 + Tailwind 4.3.5 + shadcn-svelte 1.8.1, svelte-spa-router, qrcode (QR), uPlot (графики), vitest.
 
-**Spec:** `docs/superpowers/specs/2026-11-20-fly-vpn-panel-design.md` (одобрен 2026-11-20). ADR: `docs/adr/` 0001–0007 accepted.
+**Spec:** `docs/superpowers/specs/2026-11-20-fly-vpn-panel-design.md` (одобрен 2026-11-20). ADR: `docs/adr/` 0001–0008 accepted (0001 amended by 0008).
 
 ## Global Constraints
 
-- Репо **публичный**: никаких реальных IP/доменов/имён/путей к секретам в любом артефакте (код, тесты, фикстуры, доки). Плейсхолдеры: `<ENTRY_IP>`, `<EGRESS_IP>`, `<PANEL_DOMAIN>`, `<DOCKER_GW>`. В фикстурах — TEST-NET адреса (203.0.113.x / 198.51.100.x). Реальные значения — только серверный `/opt/flypanel/.env` (chmod 600, gitignored) + приватный runbook оператора вне репо. Grep-проверка перед каждым push.
+- Репо **публичный**: никаких реальных IP/доменов/имён/путей к секретам в любом артефакте (код, тесты, фикстуры, доки). Плейсхолдеры: `<ENTRY_IP>`, `<PANEL_DOMAIN>`, `<EGRESS_IP>` (опциональный; пуст → sendThrough опускается). В фикстурах — TEST-NET адреса (203.0.113.x / 198.51.100.x). Реальные значения — только серверный `/opt/flypanel/.env` (chmod 600, gitignored) + приватный runbook оператора вне репо. Grep-проверка перед каждым push.
 - Ветки `<фича>-20261120-NN` от `dev`, слияние в `dev`. Каждый Task = своя ветка (указана в заголовке).
 - Go ≥1.22, HTTP-роутер stdlib `net/http` (patterns Go 1.22+). Фреймворк не нужен.
 - SQLite DSN: `_journal_mode=WAL&_busy_timeout=5000&synchronous=FULL`. Один писатель. Бэкап ежедневный, 7 копий.
 - xray **v26.11.9** (пин). API inbound dokodemo-door `127.0.0.1:10811` tag `api`. Policy level 0: `statsUserUplink/statsUserDownlink/statsUserOnline = true`.
-- VPN: VLESS+XHTTP+Reality `0.0.0.0:8443`; вход `<ENTRY_IP>`, egress freedom `sendThrough <EGRESS_IP>`. Reality dest дефолт `www.microsoft.com:443`, path `/xhttp`, mode `stream-up`, fp `chrome`.
-- Панель bind: прод `<DOCKER_GW>:3002` (из .env), dev-дефолт в коде `127.0.0.1:3002`.
+- VPN: VLESS+XHTTP+Reality `0.0.0.0:8443`; вход `<ENTRY_IP>`; freedom `sendThrough <EGRESS_IP>` только если EGRESS_IP задан (выделенная VPS: один IP, поле опущено). Reality dest дефолт `www.microsoft.com:443`, path `/xhttp`, mode `stream-up`, fp `chrome`.
+- Панель bind: `127.0.0.1:3002` (прод и dev; LISTEN_ADDR из .env). Выделенная VPS (ADR-0008): 1 vCPU / 1 GB / 10 GB, Ubuntu 24.04, один IP (вход=выход), swap 2 GB создать при деплое, Docker не нужен, Caddy нативный. Агент провайдера (8080/8189) не трогать.
 - Auth: один админ, CLI `flypanel admin init`, публичной регистрации НЕТ. argon2id. JWT access 15 мин + refresh 7 дней, httpOnly cookies SameSite=Strict, refresh в БД с отзывом. TOTP опционально → обязателен после включения; 10 backup-кодов (хеши, одноразовые); отключение только с действующим кодом. Rate limit логина 5/мин/IP.
 - Юзеры: quota_bytes (0=безлимит), quota_period none|day|week|month, **up+down суммарно**, счётчик = агрегат дельт с quota_reset_at; device_limit (дефолт 0) по **concurrent distinct онлайн-IP**, авто-возврат; expiry авто-отключение/включение; disabled_reason quota|device_limit|expired|manual; manual никогда не авто-включается. Membership v1: все активные юзеры во всех включённых inbound.
 - Подписки: `https://<PANEL_DOMAIN>/sub/<token>` + `/base64 /json /mihomo /clash`; UA-fallback: v2rayNG→base64, FlClash / clash-verge (lowercase)→mihomo, прочее→base64. Шаблоны raw в БД, **без санитайзера нигде**. Дефолты зеркалят продакшн (read-only чтение разрешено оператором; пути — приватный runbook).
 - Поллер gRPC 30 с (конфигурируемо). Счётчики xray сбрасываются при рестарте — потеря ≤ интервала.
 - UI: **русский**, тёмная тема. SPA embed.FS. Node ≥20.19/22.12 только на сборке. Версии npm пинить при старте (могли уплыть).
-- Серверные действия: только SSH-инструментарий оператора, **явное разрешение на каждое действие**, секреты не печатать, существующий стек НЕ ТРОГАТЬ. Результаты — в приватный журнал оператора (вне репо).
+- Серверные действия: только SSH-инструментарий оператора, **явное разрешение на каждое действие**, секреты не печатать. Старый сервер с действующим стеком физически отдельно — НЕ ТРОГАТЬ (единственное касание: read-only чтение прод-шаблонов, Task 8). Результаты — в приватный журнал оператора (вне репо).
 - Timestamps в БД и API: RFC3339 **UTC**. Границы периодов квоты — UTC (день 00:00, неделя понедельник 00:00, месяц 1-е 00:00).
 
 ## Review Focus
@@ -42,7 +42,7 @@
 **Branch:** `store-20261120-01`
 
 **Files:**
-- Create: `go.mod`, `.gitignore`, `Makefile`, `.env.example`, `cmd/flypanel/main.go`, `internal/config/config.go`, `internal/store/store.go`, `internal/store/migrations.go`, `internal/store/migrations/0001_init.sql`
+- Create: `go.mod`, `Makefile`, `.env.example`, `cmd/flypanel/main.go`, `internal/config/config.go`, `internal/store/store.go`, `internal/store/migrations.go`, `internal/store/migrations/0001_init.sql`
 - Test: `internal/config/config_test.go`, `internal/store/store_test.go`
 
 **Interfaces:**
@@ -62,11 +62,11 @@
 - `devices(id INTEGER PK, username TEXT NOT NULL, ip TEXT NOT NULL, first_seen TEXT NOT NULL, last_seen TEXT NOT NULL, UNIQUE(username, ip))`
 - `refresh_tokens(id INTEGER PK, token_hash TEXT UNIQUE NOT NULL, expires_at TEXT NOT NULL, revoked INTEGER NOT NULL DEFAULT 0)`
 
-`.gitignore`: `.env`, `data/`, `*.db`, `bin/`, `web/node_modules/`, `web/dist/*` + `!web/dist/index.html`. `.env.example` — только плейсхолдеры. `Makefile`: `build` (npm ci+build → go build), `test` (go test ./...), `web-test`, `cross` (GOOS=linux GOARCH=amd64). `main.go` пока: подкоманда `version`, заглушка `serve` (полноценный serve — Task 10).
+`.gitignore` уже создан в корне репо (секреты/БД/бинарники/логи/бэкапы/node_modules/dist, исключение `!web/dist/index.html` для embed-placeholder) — проверить, дополнить при необходимости. `.env.example` — только плейсхолдеры, EGRESS_IP пустой по умолчанию. `Makefile`: `build` (npm ci+build → go build), `test` (go test ./...), `web-test`, `cross` (GOOS=linux GOARCH=amd64). `main.go` пока: подкоманда `version`, заглушка `serve` (полноценный serve — Task 10).
 
 - [ ] **Step 1: Падающие тесты**
 
-`config_test.go`: `TestLoadDefaults` (пустой env → DataDir `./data`, ListenAddr `127.0.0.1:3002`, PollIntervalSec 30); `TestLoadEnvFile` (временный .env с `LISTEN_ADDR=203.0.113.1:3002`, `EGRESS_IP=198.51.100.7` → поля совпадают).
+`config_test.go`: `TestLoadDefaults` (пустой env → DataDir `./data`, ListenAddr `127.0.0.1:3002`, PollIntervalSec 30, EgressIP пуст); `TestLoadEnvFile` (временный .env с `LISTEN_ADDR=203.0.113.1:3002`, `EGRESS_IP=198.51.100.7` → поля совпадают).
 `store_test.go`: `TestOpenMigrates` (Open во временный dir → `schema_version`=1, все 8 таблиц существуют); `TestOpenIdempotent` (повторный Open не падает, версия та же); `TestWALPragmas` (`PRAGMA journal_mode` → `wal`, `PRAGMA busy_timeout` → 5000, `PRAGMA synchronous` → 2).
 
 - [ ] **Step 2: Прогнать — FAIL** (`go test ./...`: пакеты не компилируются)
@@ -129,7 +129,7 @@ git add -A && git commit -m "feat: scaffold, config, sqlite core + schema v1"
 
 - [ ] **Step 1: Падающие тесты**
 
-`config_test.go`: `TestGenerateGolden` — 1 enabled inbound (fixture: port 8443, Reality dest `www.microsoft.com:443`, pbk/sid тестовые, path `/xhttp`, mode stream-up) + 2 активных юзера + routing с правилом `{"type":"field","domain":["geosite:category-ads-all"],"outboundTag":"block"}` + egressIP `198.51.100.7` → JSON семантически равен `testdata/golden.json` (сравнение через unmarshal+reflect, порядок ключей не важен). `TestGenerateInjectsOnlyActive` — disabled юзер не попадает в clients. `TestGenerateNoSanitizer` — routing с domain/ip правилами проходит дословно. `TestGenerateEmptyRouting` → дефолт. `TestGenerateBadRouting` → ошибка.
+`config_test.go`: `TestGenerateGolden` — 1 enabled inbound (fixture: port 8443, Reality dest `www.microsoft.com:443`, pbk/sid тестовые, path `/xhttp`, mode stream-up) + 2 активных юзера + routing с правилом `{"type":"field","domain":["geosite:category-ads-all"],"outboundTag":"block"}` + egressIP `198.51.100.7` → JSON семантически равен `testdata/golden.json` (сравнение через unmarshal+reflect, порядок ключей не важен). `TestGenerateInjectsOnlyActive` — disabled юзер не попадает в clients. `TestGenerateNoSanitizer` — routing с domain/ip правилами проходит дословно. `TestGenerateEmptyRouting` → дефолт. `TestGenerateBadRouting` → ошибка. `TestGenerateNoEgress` — egressIP `""` → freedom без поля sendThrough (прод-дефолт выделенной VPS: один IP).
 `keys_test.go`: `TestKeyPairFormat` (43 chars, RawURL base64, pub детерминированно выводится из priv через ecdh).
 `proc_test.go`: `TestManagerStartStop` (фейковый «xray» — shell-скрипт `sleep infinity` во временном dir; Start → Running, Stop → не Running); `TestManagerCrashBackoff` (скрипт `exit 1` → Restarts растёт, процесс не зомби); `TestApplyAtomicFailureKeepsOld` (rename в несуществующий dir → ошибка, старый файл цел). Validate с реальным бинарником — integration за `XRAY_BIN` env (skip если нет): валидный golden → nil, битый JSON → ошибка.
 
@@ -441,26 +441,26 @@ git add -A && git commit -m "feat: scaffold, config, sqlite core + schema v1"
 
 ---
 
-### Task 15: Deploy + E2E + regression (OPERATOR-INTERACTIVE)
+### Task 15: Deploy + E2E (OPERATOR-INTERACTIVE, выделенная VPS)
 
-**Branch:** без ветки кода — ops-плейбук. **Выполняется в основной сессии, НЕ сабагентом. Каждый шаг — явное «да» пользователя.** Реальные значения — из приватного runbook оператора, не из репо. Результаты — в приватный журнал (вне репо).
+**Branch:** без ветки кода — ops-плейбук. **Выполняется в основной сессии, НЕ сабагентом. Каждый шаг — явное «да» пользователя.** Реальные значения — из приватного runbook оператора, не из репо. Результаты — в приватный журнал (вне репо). Целевой сервер — выделенная VPS (ADR-0008); старый сервер с Remnawave физически не затрагивается.
 
 **Files:**
 - Create: `docs/deploy-checklist.md` (обезличенный чеклист с плейсхолдерами)
-- Серверные артефакты (вне репо): `/opt/flypanel/.env`, systemd unit, Caddy-блок
+- Серверные артефакты (вне репо): `/opt/flypanel/.env`, systemd unit, Caddyfile
 
 **Interfaces:**
 - Consumes: бинарник linux/amd64 (Task 14), spec §8
 - Produces: работающий прод-стек + E2E-доказательства + журнал
 
-- [ ] **Step 1: Порты.** На сервере (read-only, разрешение): `ss -ltnp | grep -E ':8443|:3002|:10811'` → пусто. Занято → СТОП, выбрать другие порты с оператором (обновить .env, не код).
-- [ ] **Step 2: Файлы.** Создать /opt/flypanel/{bin,data,logs,backups}; загрузить бинарник; скачать xray **v26.11.9** официальный релиз linux-amd64 → bin/xray (checksum проверить); `.env` с реальными значениями (chmod 600): LISTEN_ADDR=`<DOCKER_GW>:3002` (gateway проверить: `docker network inspect`), ENTRY_IP, EGRESS_IP, PANEL_DOMAIN, XRAY_BIN, DATA_DIR.
+- [ ] **Step 1: Порты + swap.** На VPS (read-only, разрешение): `ss -ltnp | grep -E ':80|:443|:8443|:3002|:10811'` → пусто (8080/8189 агента провайдера не трогать). Занято → СТОП, выбрать другие порты с оператором (обновить .env, не код). Swap: `swapon --show` пусто → создать 2 GB swapfile (`fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile` + запись в fstab) — отдельное «да».
+- [ ] **Step 2: Файлы.** Создать /opt/flypanel/{bin,data,logs,backups}; загрузить бинарник; скачать xray **v26.11.9** официальный релиз linux-amd64 → bin/xray (checksum проверить); `.env` с реальными значениями (chmod 600): LISTEN_ADDR=`127.0.0.1:3002`, ENTRY_IP, EGRESS_IP= (пусто — один IP), PANEL_DOMAIN, XRAY_BIN, DATA_DIR.
 - [ ] **Step 3: systemd.** Unit flypanel.service (User=flypanel, NoNewPrivileges, ProtectSystem=strict, ReadWritePaths=/opt/flypanel, Restart=on-failure); `flypanel admin init` (оператор вводит пароль); start; `journalctl -u flypanel --tail 30` — xray стартовал, poller работает.
-- [ ] **Step 4: UFW.** allow 8443/tcp (мир); allow from docker-подсети to `<DOCKER_GW>` port 3002/tcp. Существующие правила не менять.
-- [ ] **Step 5: Caddy (ТИХОЕ ОКНО, отдельное «да», предупредить: reload рвёт ВСЕ established-соединения всех сайтов, операторский SSH через туннель упадёт — переподключиться).** Бэкап `cp -a Caddyfile Caddyfile.bak-YYYYMMDD` → добавить ОДИН блок `<PANEL_DOMAIN> { reverse_proxy <DOCKER_GW>:3002 }` записью `cat >` (inode!) → reload через stdin → верификация runtime :2019 + LE-сертификат + `curl https://<PANEL_DOMAIN>/` → SPA.
-- [ ] **Step 6: E2E нового канала.** Создать тестового юзера через API/UI. На сервере: xray-клиент с конфигом из `/sub/<token>/json[0]` → `curl --socks5-hostname 127.0.0.1:<port> https://api.ipify.org` = **`<EGRESS_IP>`**. Все 4 формата подписки отдают валидный контент (base64 декодируется, json парсится, yaml валиден). Тестовый клиент виден в дашборде (IP + трафик > 0 после поллинга). Квота: поставить тестовому юзеру quota 1 МБ → после трафика disabled(quota) → сброс → enable.
-- [ ] **Step 7: Регрессия существующего.** Нода действующей панели isConnected=true; старая подписка отдаёт конфиги; старый канал E2E жив. Любая регрессия → СТОП + откат.
-- [ ] **Step 8: Откат (готовность).** Убрать Caddy-блок + reload; `systemctl stop flypanel`; закрыть 8443 в UFW. Данные /opt/flypanel не трогаются.
+- [ ] **Step 4: UFW.** allow 22/80/443/8443/tcp (мир). 3002/10811 — только loopback, правил наружу не нужно. Чужие правила (агент провайдера) не менять.
+- [ ] **Step 5: DNS + Caddy (отдельное «да»). DNS:** оператор перенаправляет A-запись `<PANEL_DOMAIN>` на `<ENTRY_IP>` (сейчас указывает на старый сервер); дождаться распространения (DoH-проверка). **Caddy:** нативная установка (официальный репозиторий) → Caddyfile с нуля: блок `<PANEL_DOMAIN> { reverse_proxy 127.0.0.1:3002 }` → `caddy validate` → `systemctl reload caddy` (предупредить: reload рвёт established-соединения панели; других сайтов на этом Caddy нет, тихое окно не нужно) → верификация runtime :2019 + LE-сертификат + `curl https://<PANEL_DOMAIN>/` → SPA. Бэкап `cp -a Caddyfile Caddyfile.bak-YYYYMMDD` перед правками.
+- [ ] **Step 6: E2E нового канала.** Создать тестового юзера через API/UI. На сервере: xray-клиент с конфигом из `/sub/<token>/json[0]` → `curl --socks5-hostname 127.0.0.1:<port> https://api.ipify.org` = **`<ENTRY_IP>`** (один IP; если задан EGRESS_IP — он). Все 4 формата подписки отдают валидный контент (base64 декодируется, json парсится, yaml валиден). Тестовый клиент виден в дашборде (IP + трафик > 0 после поллинга). Квота: поставить тестовому юзеру quota 1 МБ → после трафика disabled(quota) → сброс → enable.
+- [ ] **Step 7: Старый стек.** Физически отдельный сервер — регрессия не требуется. Опционально (отдельное «да», read-only): старый канал жив, старая подписка отдаёт конфиги.
+- [ ] **Step 8: Откат (готовность).** `systemctl stop flypanel`; закрыть 8443 в UFW; убрать Caddy-блок + reload; DNS вернуть при необходимости. Данные /opt/flypanel не трогаются.
 - [ ] **Step 9: Журнал.** Запись в приватный журнал оператора (вне репо): что сделано, верификации, откат. В репо — только обезличенный `docs/deploy-checklist.md`.
 - [ ] **Step 10: Commit** `git checkout -b deploy-20261120-15 dev && git add docs/deploy-checklist.md && git commit -m "docs: anonymized deploy checklist"`
 
@@ -471,3 +471,4 @@ git add -A && git commit -m "feat: scaffold, config, sqlite core + schema v1"
 - Spec coverage: §6.1→T4, §6.2→T2/T6/T9, §6.3→T3/T7, §6.4→T3/T7, §6.5→T7/T13, §6.6→T8, §6.7→T5/T9, §6.8→T1/T2/T9, §6.9→T4/T6/T7/T8/T10, §7→T11–T13, §8→T15, §9→branches+tests в каждом Task, §3→Global Constraints+T14 grep. Non-goals не реализуются.
 - Решения билдера (spec §10), зафиксированные планом: миграции — embed SQL + schema_version (без зависимости); Reality keygen — Go crypto/ecdh (без subprocess); QR — npm `qrcode`; графики — uPlot; JSON-редактор — textarea+lint (без CodeMirror v1); роутер фронта — svelte-spa-router; периодный счётчик — агрегат из samples (без колонки-счётчика); курсор кумулятивных stats — в settings (переживает рестарт панели); retention samples 90д / devices 30д; username неизменяем; base64-шаблона нет (структурные ссылки); backup — VACUUM INTO горутиной (без cron); JWT key — settings, generate при первом старте; пароль админа ≥12 символов; `admin init --password-stdin` для автоматизации.
 - Отклонения от эскиза spec (осознанные, на проверку оператору): (1) `/api/auth/2fa/*` **защищены JWT** (spec §6.9 пишет «кроме /api/auth/*», но публичный enroll позволил бы атакующему навязать свой 2FA и запереть админа — публичны только login/refresh/logout); (2) добавлен заголовок `Subscription-Userinfo` в /sub (стандарт де-факто для клиентов, spec не упоминает); (3) denylist обезличивания — файл вне репо, в репо не коммитится (сам список реальных значений = утечка).
+- Amendment 20.11.2026 (ADR-0008, выделенная VPS): bind 127.0.0.1:3002 вместо docker-gateway; Caddy нативный с нуля (без тихого окна/inode-ловушек); EGRESS_IP пуст → sendThrough опущен (T3 `TestGenerateNoEgress`); swap 2 GB и DNS repoint добавлены в T15; регрессия старого стека не требуется (физически отдельный сервер); `.gitignore` создан заранее в корне репо.

@@ -1,0 +1,26 @@
+# Секреты и реальные значения (только на сервере, chmod 600)
+.env
+.env.*
+!.env.example
+
+# Runtime-данные: БД, бэкапы, логи
+data/
+*.db
+*.db-*
+backups/
+logs/
+
+# Бинарники и артефакты сборки
+bin/
+/flypanel
+web/dist/*
+!web/dist/index.html
+dist/
+coverage/
+
+# Зависимости
+node_modules/
+
+# ОС / редакторы / бэкапы файлов
+.DS_Store
+*.bak-*
