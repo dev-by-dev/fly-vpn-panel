@@ -294,6 +294,60 @@ func TestMiddleware(t *testing.T) {
 	}
 }
 
+// TestVerify2FADoubleKeepsCodes guards against an HTTP retry / double-submit
+// of Verify2FA wiping the already-installed backup codes.
+func TestVerify2FADoubleKeepsCodes(t *testing.T) {
+	h := newTestEnv(t)
+	createAdmin(t, h.Store, "a-sufficiently-long-password")
+
+	rr := postJSON(t, h.Enroll2FA, map[string]string{})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("enroll status = %d (%s), want 200", rr.Code, rr.Body.String())
+	}
+	var enrollResp struct {
+		Secret      string   `json:"secret"`
+		BackupCodes []string `json:"backup_codes"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &enrollResp); err != nil {
+		t.Fatalf("unmarshal enroll body: %v", err)
+	}
+
+	code, err := totp.GenerateCode(enrollResp.Secret, time.Now())
+	if err != nil {
+		t.Fatalf("GenerateCode(): %v", err)
+	}
+	rr = postJSON(t, h.Verify2FA, map[string]string{"code": code})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("first verify status = %d (%s), want 200", rr.Code, rr.Body.String())
+	}
+
+	// Second Verify2FA with a fresh valid TOTP code (retry) must succeed
+	// and must NOT wipe the installed backup codes.
+	code, err = totp.GenerateCode(enrollResp.Secret, time.Now())
+	if err != nil {
+		t.Fatalf("GenerateCode(): %v", err)
+	}
+	rr = postJSON(t, h.Verify2FA, map[string]string{"code": code})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("second verify status = %d (%s), want 200", rr.Code, rr.Body.String())
+	}
+
+	ok, err := h.Store.BackupCodeConsume(backupHash(enrollResp.BackupCodes[0]))
+	if err != nil {
+		t.Fatalf("BackupCodeConsume(): %v", err)
+	}
+	if !ok {
+		t.Fatal("backup code 0 not consumable after double Verify2FA — codes were wiped")
+	}
+	ok, err = h.Store.BackupCodeConsume(backupHash(enrollResp.BackupCodes[0]))
+	if err != nil {
+		t.Fatalf("BackupCodeConsume() reuse: %v", err)
+	}
+	if ok {
+		t.Fatal("backup code 0 consumed twice, want single-use")
+	}
+}
+
 func TestAdminInitSecondFails(t *testing.T) {
 	st, err := store.Open(t.TempDir())
 	if err != nil {
