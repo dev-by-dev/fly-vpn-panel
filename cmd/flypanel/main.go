@@ -20,6 +20,8 @@ func main() {
 	case "serve":
 		fmt.Fprintln(os.Stderr, "serve: not implemented yet")
 		os.Exit(1)
+	case "admin":
+		adminCommand(os.Args[2:])
 	default:
 		usage()
 		os.Exit(2)
@@ -27,5 +29,5 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: flypanel <version|serve>")
+	fmt.Fprintln(os.Stderr, "usage: flypanel <version|serve|admin init>")
 }
