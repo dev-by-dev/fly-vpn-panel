@@ -1,0 +1,315 @@
+package auth
+
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/pquerna/otp/totp"
+
+	"flypanel/internal/store"
+)
+
+const testIP = "203.0.113.10:4444"
+
+// newTestEnv opens a store in a temp dir and builds Handlers around it.
+func newTestEnv(t *testing.T) *Handlers {
+	t.Helper()
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("store.Open(): %v", err)
+	}
+	t.Cleanup(func() { st.Close() })
+	return &Handlers{
+		Store: st,
+		JWT:   NewJWT(newTestKey(t)),
+		RL:    NewRateLimiter(5, time.Minute),
+	}
+}
+
+func createAdmin(t *testing.T, st *store.Store, password string) {
+	t.Helper()
+	hash, err := HashPassword(password)
+	if err != nil {
+		t.Fatalf("HashPassword(): %v", err)
+	}
+	if err := st.AdminCreate("admin", hash); err != nil {
+		t.Fatalf("AdminCreate(): %v", err)
+	}
+}
+
+func postJSON(t *testing.T, h http.HandlerFunc, body any) *httptest.ResponseRecorder {
+	t.Helper()
+	b, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(b))
+	req.RemoteAddr = testIP
+	rr := httptest.NewRecorder()
+	h(rr, req)
+	return rr
+}
+
+func bodyError(t *testing.T, rr *httptest.ResponseRecorder) string {
+	t.Helper()
+	var m map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &m); err != nil {
+		t.Fatalf("unmarshal body %q: %v", rr.Body.String(), err)
+	}
+	if e, ok := m["error"].(string); ok {
+		return e
+	}
+	return ""
+}
+
+func cookie(rr *httptest.ResponseRecorder, name string) *http.Cookie {
+	for _, c := range rr.Result().Cookies() {
+		if c.Name == name {
+			return c
+		}
+	}
+	return nil
+}
+
+func TestLoginFlow(t *testing.T) {
+	h := newTestEnv(t)
+	createAdmin(t, h.Store, "a-sufficiently-long-password")
+
+	rr := postJSON(t, h.Login, map[string]string{
+		"username": "admin", "password": "a-sufficiently-long-password",
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("login status = %d (%s), want 200", rr.Code, rr.Body.String())
+	}
+	if bodyError(t, rr) != "" {
+		t.Errorf("login body error = %q, want none", bodyError(t, rr))
+	}
+	acc := cookie(rr, "fp_access")
+	ref := cookie(rr, "fp_refresh")
+	if acc == nil || acc.Value == "" {
+		t.Error("fp_access cookie missing after login")
+	}
+	if ref == nil || ref.Value == "" {
+		t.Error("fp_refresh cookie missing after login")
+	}
+	if ref.Path != "/api/auth" {
+		t.Errorf("fp_refresh path = %q, want /api/auth", ref.Path)
+	}
+	if !acc.HttpOnly || !ref.HttpOnly {
+		t.Error("auth cookies must be HttpOnly")
+	}
+	if acc.SameSite != http.SameSiteStrictMode || ref.SameSite != http.SameSiteStrictMode {
+		t.Error("auth cookies must be SameSite=Strict")
+	}
+	if err := h.JWT.VerifyAccess(acc.Value); err != nil {
+		t.Errorf("issued access token invalid: %v", err)
+	}
+
+	rr = postJSON(t, h.Login, map[string]string{
+		"username": "admin", "password": "wrong-password-xxx",
+	})
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong-password status = %d, want 401", rr.Code)
+	}
+	if got := bodyError(t, rr); got != "invalid_credentials" {
+		t.Errorf("wrong-password error = %q, want invalid_credentials", got)
+	}
+}
+
+func TestLogin2FARequired(t *testing.T) {
+	h := newTestEnv(t)
+	createAdmin(t, h.Store, "a-sufficiently-long-password")
+	secret, _, err := EnrollTOTP("admin")
+	if err != nil {
+		t.Fatalf("EnrollTOTP(): %v", err)
+	}
+	if err := h.Store.AdminSetTOTP(secret, true); err != nil {
+		t.Fatalf("AdminSetTOTP(): %v", err)
+	}
+
+	// No code -> 2fa_required.
+	rr := postJSON(t, h.Login, map[string]string{
+		"username": "admin", "password": "a-sufficiently-long-password",
+	})
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("no-code status = %d, want 401", rr.Code)
+	}
+	if got := bodyError(t, rr); got != "2fa_required" {
+		t.Errorf("no-code error = %q, want 2fa_required", got)
+	}
+
+	// Wrong code -> 2fa_required.
+	rr = postJSON(t, h.Login, map[string]string{
+		"username": "admin", "password": "a-sufficiently-long-password", "code": "000000",
+	})
+	if rr.Code != http.StatusUnauthorized || bodyError(t, rr) != "2fa_required" {
+		t.Fatalf("wrong-code = %d %q, want 401 2fa_required", rr.Code, bodyError(t, rr))
+	}
+
+	// Valid TOTP code -> ok.
+	code, err := totp.GenerateCode(secret, time.Now())
+	if err != nil {
+		t.Fatalf("GenerateCode(): %v", err)
+	}
+	rr = postJSON(t, h.Login, map[string]string{
+		"username": "admin", "password": "a-sufficiently-long-password", "code": code,
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("totp-code status = %d (%s), want 200", rr.Code, rr.Body.String())
+	}
+	if cookie(rr, "fp_access") == nil {
+		t.Error("fp_access cookie missing after 2FA login")
+	}
+
+	// Backup code -> ok once, then rejected (consumed).
+	codes, hashes, err := GenerateBackupCodes()
+	if err != nil {
+		t.Fatalf("GenerateBackupCodes(): %v", err)
+	}
+	if err := h.Store.BackupCodesReplace(hashes); err != nil {
+		t.Fatalf("BackupCodesReplace(): %v", err)
+	}
+	rr = postJSON(t, h.Login, map[string]string{
+		"username": "admin", "password": "a-sufficiently-long-password", "code": codes[0],
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("backup-code status = %d (%s), want 200", rr.Code, rr.Body.String())
+	}
+	// Same backup code again -> 401 (single use).
+	rr = postJSON(t, h.Login, map[string]string{
+		"username": "admin", "password": "a-sufficiently-long-password", "code": codes[0],
+	})
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("backup-code reuse status = %d, want 401", rr.Code)
+	}
+}
+
+func TestLoginRateLimit(t *testing.T) {
+	h := newTestEnv(t)
+	createAdmin(t, h.Store, "a-sufficiently-long-password")
+	for i := 0; i < 5; i++ {
+		rr := postJSON(t, h.Login, map[string]string{
+			"username": "admin", "password": "wrong-password-xxx",
+		})
+		if rr.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt #%d status = %d, want 401", i+1, rr.Code)
+		}
+	}
+	rr := postJSON(t, h.Login, map[string]string{
+		"username": "admin", "password": "a-sufficiently-long-password",
+	})
+	if rr.Code != http.StatusTooManyRequests {
+		t.Fatalf("6th request status = %d, want 429", rr.Code)
+	}
+}
+
+func TestRefreshLogout(t *testing.T) {
+	h := newTestEnv(t)
+	createAdmin(t, h.Store, "a-sufficiently-long-password")
+
+	rr := postJSON(t, h.Login, map[string]string{
+		"username": "admin", "password": "a-sufficiently-long-password",
+	})
+	ref := cookie(rr, "fp_refresh")
+	if ref == nil {
+		t.Fatal("no fp_refresh cookie after login")
+	}
+
+	// Refresh issues a new access cookie.
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/refresh", nil)
+	req.RemoteAddr = testIP
+	req.AddCookie(&http.Cookie{Name: "fp_refresh", Value: ref.Value})
+	rr = httptest.NewRecorder()
+	h.Refresh(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("refresh status = %d (%s), want 200", rr.Code, rr.Body.String())
+	}
+	if cookie(rr, "fp_access") == nil {
+		t.Error("fp_access cookie missing after refresh")
+	}
+
+	// Logout revokes the refresh token.
+	req = httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
+	req.RemoteAddr = testIP
+	req.AddCookie(&http.Cookie{Name: "fp_refresh", Value: ref.Value})
+	rr = httptest.NewRecorder()
+	h.Logout(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("logout status = %d, want 200", rr.Code)
+	}
+
+	// The old refresh token no longer grants access.
+	req = httptest.NewRequest(http.MethodPost, "/api/auth/refresh", nil)
+	req.RemoteAddr = testIP
+	req.AddCookie(&http.Cookie{Name: "fp_refresh", Value: ref.Value})
+	rr = httptest.NewRecorder()
+	h.Refresh(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("refresh after logout status = %d, want 401", rr.Code)
+	}
+
+	// Missing refresh cookie -> 401.
+	req = httptest.NewRequest(http.MethodPost, "/api/auth/refresh", nil)
+	req.RemoteAddr = testIP
+	rr = httptest.NewRecorder()
+	h.Refresh(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("refresh without cookie status = %d, want 401", rr.Code)
+	}
+}
+
+func TestMiddleware(t *testing.T) {
+	j := NewJWT(newTestKey(t))
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	h := Middleware(j)(next)
+
+	do := func(token string) int {
+		req := httptest.NewRequest(http.MethodGet, "/api/anything", nil)
+		if token != "" {
+			req.AddCookie(&http.Cookie{Name: "fp_access", Value: token})
+		}
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		return rr.Code
+	}
+
+	if code := do(""); code != http.StatusUnauthorized {
+		t.Errorf("no cookie status = %d, want 401", code)
+	}
+	tok, err := j.IssueAccess()
+	if err != nil {
+		t.Fatalf("IssueAccess(): %v", err)
+	}
+	if code := do(tok); code != http.StatusOK {
+		t.Errorf("valid token status = %d, want 200", code)
+	}
+	if code := do(tok + "x"); code != http.StatusUnauthorized {
+		t.Errorf("tampered token status = %d, want 401", code)
+	}
+}
+
+func TestAdminInitSecondFails(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("store.Open(): %v", err)
+	}
+	defer st.Close()
+
+	if err := AdminInit(st, "admin", "long-enough-password-1"); err != nil {
+		t.Fatalf("first AdminInit(): %v", err)
+	}
+	if err := AdminInit(st, "admin", "long-enough-password-2"); err == nil {
+		t.Fatal("second AdminInit() = nil, want error (admin exists)")
+	}
+
+	// Password policy: shorter than 12 chars is rejected.
+	if err := AdminInit(st, "admin", "short"); err == nil {
+		t.Fatal("AdminInit(short password) = nil, want error")
+	}
+}
