@@ -141,7 +141,7 @@
 - Дашборд: графики трафика по юзерам (день/неделя/месяц), список онлайн-устройств (юзер, IP, last-seen), состояние xray (running/version/uptime/restarts), суммарный трафик.
 
 ### 6.8 БД (SQLite, modernc.org/sqlite v1.62.0, pure Go)
-- DSN: `_journal_mode=WAL&_busy_timeout=5000&synchronous=FULL`. Один писатель.
+- DSN: `_journal_mode=WAL&_busy_timeout=5000&_synchronous=FULL` (ключ `_synchronous` — modernc распознаёт только его; голый `synchronous=` игнорируется). Один писатель.
 - Таблицы (эскиз): `admin`, `users`, `inbounds`, `settings` (key/value: шаблоны, Reality-ключи, интервал поллинга), `traffic_samples`, `devices`, `refresh_tokens`.
 - Бэкап: ежедневный cron `sqlite3 panel.db ".backup …"` (или Go-эквивалент), хранение 7 копий. Восстановление = копия файла.
 - Миграции: версионирование схемы (инструмент — на усмотрение билдера).

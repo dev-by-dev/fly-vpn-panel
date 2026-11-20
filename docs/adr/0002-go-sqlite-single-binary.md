@@ -10,7 +10,7 @@
 
 ## Decision
 
-Один статический Go-бинарник `flypanel` (HTTP stdlib net/http, SPA через embed.FS) + **SQLite** (modernc.org/sqlite, pure Go; WAL + `_busy_timeout` + synchronous=FULL) + бинарник xray рядом. Бэкап БД = копия файла.
+Один статический Go-бинарник `flypanel` (HTTP stdlib net/http, SPA через embed.FS) + **SQLite** (modernc.org/sqlite, pure Go; WAL + `_busy_timeout` + `_synchronous=FULL`) + бинарник xray рядом. Бэкап БД = копия файла.
 
 ## Alternatives Considered
 
@@ -37,5 +37,5 @@
 - pure-Go драйвер медленнее C-биндингов (нерелевантно при этой нагрузке).
 
 ### Risks
-- Повреждение файла БД → ежедневный бэкап (7 копий) + WAL + synchronous=FULL.
+- Повреждение файла БД → ежедневный бэкап (7 копий) + WAL + `_synchronous=FULL`.
 - Конкурентная запись из нескольких горутин → один писатель + busy_timeout.

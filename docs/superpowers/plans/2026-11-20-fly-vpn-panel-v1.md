@@ -15,7 +15,7 @@
 - Репо **публичный**: никаких реальных IP/доменов/имён/путей к секретам в любом артефакте (код, тесты, фикстуры, доки). Плейсхолдеры: `<ENTRY_IP>`, `<PANEL_DOMAIN>`, `<EGRESS_IP>` (опциональный; пуст → sendThrough опускается). В фикстурах — TEST-NET адреса (203.0.113.x / 198.51.100.x). Реальные значения — только серверный `/opt/flypanel/.env` (chmod 600, gitignored) + приватный runbook оператора вне репо. Grep-проверка перед каждым push.
 - Ветки `<фича>-20261120-NN` от `dev`, слияние в `dev`. Каждый Task = своя ветка (указана в заголовке).
 - Go ≥1.22, HTTP-роутер stdlib `net/http` (patterns Go 1.22+). Фреймворк не нужен.
-- SQLite DSN: `_journal_mode=WAL&_busy_timeout=5000&synchronous=FULL`. Один писатель. Бэкап ежедневный, 7 копий.
+- SQLite DSN: `_journal_mode=WAL&_busy_timeout=5000&_synchronous=FULL` (modernc v1.62.0 распознаёт только `_synchronous`/`_sync`; голый `synchronous=` молча игнорируется — проверено по исходникам драйвера, Task 1). Один писатель. Бэкап ежедневный, 7 копий.
 - xray **v26.11.9** (пин). API inbound dokodemo-door `127.0.0.1:10811` tag `api`. Policy level 0: `statsUserUplink/statsUserDownlink/statsUserOnline = true`.
 - VPN: VLESS+XHTTP+Reality `0.0.0.0:8443`; вход `<ENTRY_IP>`; freedom `sendThrough <EGRESS_IP>` только если EGRESS_IP задан (выделенная VPS: один IP, поле опущено). Reality dest дефолт `www.microsoft.com:443`, path `/xhttp`, mode `stream-up`, fp `chrome`.
 - Панель bind: `127.0.0.1:3002` (прод и dev; LISTEN_ADDR из .env). Выделенная VPS (ADR-0008): 1 vCPU / 1 GB / 10 GB, Ubuntu 24.04, один IP (вход=выход), swap 2 GB создать при деплое, Docker не нужен, Caddy нативный. Агент провайдера (8080/8189) не трогать.
