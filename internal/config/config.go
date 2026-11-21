@@ -19,6 +19,7 @@ type Config struct {
 	EgressIP        string
 	PanelDomain     string
 	PollIntervalSec int
+	CookieSecure    bool
 }
 
 // Load reads the env file (path from FLYPANEL_ENV, default ./.env) and
@@ -87,6 +88,15 @@ func (c *Config) set(key, value string) error {
 			return fmt.Errorf("POLL_INTERVAL_SEC=%q: %w", value, err)
 		}
 		c.PollIntervalSec = n
+	case "COOKIE_SECURE":
+		if value == "" {
+			return nil
+		}
+		b, err := strconv.ParseBool(value)
+		if err != nil {
+			return fmt.Errorf("COOKIE_SECURE=%q: %w", value, err)
+		}
+		c.CookieSecure = b
 	}
 	return nil
 }

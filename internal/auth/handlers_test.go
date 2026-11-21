@@ -75,6 +75,58 @@ func cookie(rr *httptest.ResponseRecorder, name string) *http.Cookie {
 	return nil
 }
 
+func TestCookieSecureFlag(t *testing.T) {
+	h := newTestEnv(t)
+	h.SecureCookies = true
+	createAdmin(t, h.Store, "a-sufficiently-long-password")
+
+	rr := postJSON(t, h.Login, map[string]string{
+		"username": "admin", "password": "a-sufficiently-long-password",
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("login status = %d (%s), want 200", rr.Code, rr.Body.String())
+	}
+	acc := cookie(rr, "fp_access")
+	ref := cookie(rr, "fp_refresh")
+	if acc == nil || ref == nil {
+		t.Fatal("auth cookies missing after login")
+	}
+	if !acc.Secure || !ref.Secure {
+		t.Error("Secure flag missing on issued cookies (SecureCookies=true)")
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/refresh", nil)
+	req.AddCookie(&http.Cookie{Name: RefreshCookie, Value: ref.Value})
+	rr = httptest.NewRecorder()
+	h.Refresh(rr, req)
+	if got := cookie(rr, "fp_access"); got == nil || !got.Secure {
+		t.Error("Secure flag missing on refresh-issued access cookie")
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
+	req.RemoteAddr = testIP
+	rr = httptest.NewRecorder()
+	h.Logout(rr, req)
+	for _, name := range []string{"fp_access", "fp_refresh"} {
+		c := cookie(rr, name)
+		if c == nil || c.MaxAge >= 0 {
+			t.Fatalf("logout did not clear %s", name)
+		}
+		if !c.Secure {
+			t.Errorf("Secure flag missing on cleared %s cookie", name)
+		}
+	}
+
+	h2 := newTestEnv(t)
+	createAdmin(t, h2.Store, "a-sufficiently-long-password")
+	rr = postJSON(t, h2.Login, map[string]string{
+		"username": "admin", "password": "a-sufficiently-long-password",
+	})
+	if got := cookie(rr, "fp_access"); got == nil || got.Secure {
+		t.Error("Secure flag set on issued cookie (SecureCookies=false)")
+	}
+}
+
 func TestLoginFlow(t *testing.T) {
 	h := newTestEnv(t)
 	createAdmin(t, h.Store, "a-sufficiently-long-password")

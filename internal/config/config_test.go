@@ -27,6 +27,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.PollIntervalSec != 30 {
 		t.Errorf("PollIntervalSec = %d, want 30", cfg.PollIntervalSec)
 	}
+	if cfg.CookieSecure {
+		t.Error("CookieSecure = true, want false by default")
+	}
 	if cfg.EntryIP != "" || cfg.EgressIP != "" || cfg.PanelDomain != "" {
 		t.Errorf("IP/domain fields not empty: %+v", cfg)
 	}
@@ -34,7 +37,7 @@ func TestLoadDefaults(t *testing.T) {
 
 func TestLoadEnvFile(t *testing.T) {
 	envPath := filepath.Join(t.TempDir(), ".env")
-	content := "LISTEN_ADDR=203.0.113.1:3002\nEGRESS_IP=198.51.100.7\n"
+	content := "LISTEN_ADDR=203.0.113.1:3002\nEGRESS_IP=198.51.100.7\nCOOKIE_SECURE=true\n"
 	if err := os.WriteFile(envPath, []byte(content), 0o600); err != nil {
 		t.Fatalf("write env file: %v", err)
 	}
@@ -51,6 +54,9 @@ func TestLoadEnvFile(t *testing.T) {
 	}
 	if cfg.EgressIP != "198.51.100.7" {
 		t.Errorf("EgressIP = %q, want %q", cfg.EgressIP, "198.51.100.7")
+	}
+	if !cfg.CookieSecure {
+		t.Error("CookieSecure = false, want true from env file")
 	}
 	if cfg.DataDir != "./data" {
 		t.Errorf("DataDir = %q, want default %q", cfg.DataDir, "./data")
