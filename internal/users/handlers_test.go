@@ -208,10 +208,10 @@ func TestUserListEnriched(t *testing.T) {
 
 	// One fresh device (within 2*PollInterval = 60s) and one stale.
 	now := time.Now().UTC()
-	if err := st.DeviceUpsert("bob", "203.0.113.10", store.DeviceMeta{}, now); err != nil {
+	if err := st.DeviceUpsert("bob", "203.0.113.10", store.DeviceMeta{HWID: "203.0.113.10"}, now); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.DeviceUpsert("bob", "198.51.100.20", store.DeviceMeta{}, now.Add(-10*time.Minute)); err != nil {
+	if err := st.DeviceUpsert("bob", "198.51.100.20", store.DeviceMeta{HWID: "198.51.100.20"}, now.Add(-10*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 

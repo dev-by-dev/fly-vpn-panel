@@ -231,10 +231,13 @@ func TestOnlineDevices(t *testing.T) {
 	mkUser(t, st, "bob@example.com", nil)
 	old := time.Now().Add(-2 * time.Hour)
 	// Alice has a device from an earlier sighting; bob is fully offline.
-	if err := st.DeviceUpsert("alice@example.com", "203.0.113.7", store.DeviceMeta{}, old); err != nil {
+	if err := st.DeviceUpsert("alice@example.com", "203.0.113.7", store.DeviceMeta{HWID: "203.0.113.7"}, old); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.DeviceUpsert("bob@example.com", "198.51.100.9", store.DeviceMeta{}, old); err != nil {
+	if err := st.DeviceUpsert("alice@example.com", "203.0.113.8", store.DeviceMeta{HWID: "203.0.113.8"}, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DeviceUpsert("bob@example.com", "198.51.100.9", store.DeviceMeta{HWID: "198.51.100.9"}, old); err != nil {
 		t.Fatal(err)
 	}
 	fs := &fakeStats{
@@ -286,10 +289,10 @@ func TestPrune(t *testing.T) {
 	if err := st.SampleInsert("dave@example.com", now.Add(-time.Hour), 5, 5); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.DeviceUpsert("dave@example.com", "203.0.113.20", store.DeviceMeta{}, now.AddDate(0, 0, -31)); err != nil {
+	if err := st.DeviceUpsert("dave@example.com", "203.0.113.20", store.DeviceMeta{HWID: "203.0.113.20"}, now.AddDate(0, 0, -31)); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.DeviceUpsert("dave@example.com", "203.0.113.21", store.DeviceMeta{}, now); err != nil {
+	if err := st.DeviceUpsert("dave@example.com", "203.0.113.21", store.DeviceMeta{HWID: "203.0.113.21"}, now); err != nil {
 		t.Fatal(err)
 	}
 	p := NewPoller(st, &fakeStats{}, newFakeSync(), 30*time.Second)
@@ -436,14 +439,14 @@ func TestSummary(t *testing.T) {
 	if err := st.SampleInsert("gina@example.com", now.Add(-time.Hour), 10, 20); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.DeviceUpsert("gina@example.com", "203.0.113.30", store.DeviceMeta{}, now); err != nil {
+	if err := st.DeviceUpsert("gina@example.com", "203.0.113.30", store.DeviceMeta{HWID: "203.0.113.30"}, now); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.DeviceUpsert("gina@example.com", "203.0.113.31", store.DeviceMeta{}, now); err != nil {
+	if err := st.DeviceUpsert("gina@example.com", "203.0.113.31", store.DeviceMeta{HWID: "203.0.113.31"}, now); err != nil {
 		t.Fatal(err)
 	}
 	// Stale device outside the online window must not count.
-	if err := st.DeviceUpsert("gina@example.com", "203.0.113.32", store.DeviceMeta{}, now.Add(-10*time.Minute)); err != nil {
+	if err := st.DeviceUpsert("gina@example.com", "203.0.113.32", store.DeviceMeta{HWID: "203.0.113.32"}, now.Add(-10*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -466,7 +469,7 @@ func TestSummaryInterval(t *testing.T) {
 	st := openStore(t)
 	mkUser(t, st, "hana@example.com", nil)
 	now := time.Now().UTC()
-	if err := st.DeviceUpsert("hana@example.com", "203.0.113.40", store.DeviceMeta{}, now.Add(-3*time.Minute)); err != nil {
+	if err := st.DeviceUpsert("hana@example.com", "203.0.113.40", store.DeviceMeta{HWID: "203.0.113.40"}, now.Add(-3*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 
