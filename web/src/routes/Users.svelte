@@ -365,7 +365,7 @@
           </tr>
         </thead>
         <tbody>
-          {#each devices as d (d.Username + d.IP)}
+          {#each devices as d (d.Username + '|' + d.HWID + '|' + d.IP)}
             <tr class="border-t hover:bg-muted/30">
               <td class="px-3 py-2">
                 <div class="flex items-center gap-2">
