@@ -121,6 +121,7 @@ func NewRouter(d Deps) http.Handler {
 	p.HandleFunc("GET /api/stats/traffic", apiH.StatsTraffic)
 	p.HandleFunc("GET /api/stats/live", apiH.StatsLive)
 	p.HandleFunc("GET /api/stats/online", apiH.StatsOnline)
+	p.HandleFunc("GET /api/devices", apiH.Devices)
 	p.HandleFunc("GET /api/stats/summary", apiH.StatsSummary)
 	p.HandleFunc("GET /api/system", apiH.System)
 	p.HandleFunc("GET /api/settings", apiH.SettingsGet)

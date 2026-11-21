@@ -3,6 +3,7 @@
   import Router, { router, replace } from 'svelte-spa-router';
   import active from 'svelte-spa-router/active';
   import { authState, checkSession, logout } from '$lib/auth.svelte';
+  import { usersIntent } from '$lib/usersIntent.svelte';
   import { inboundsIntent } from '$lib/inboundsIntent.svelte';
   import { Button } from '$lib/components/ui/button';
   import Login from './routes/Login.svelte';
@@ -13,6 +14,8 @@
   import Templates from './routes/Templates.svelte';
   import Settings from './routes/Settings.svelte';
   import Config from './routes/Config.svelte';
+
+  let usersMenu = $state(false);
 
   const routes = {
     '/': Dashboard,
@@ -57,7 +60,46 @@
         <div class="shrink-0 py-4 text-lg font-semibold">flypanel</div>
         <nav class="flex flex-1 items-center gap-1">
           {#each nav as item (item.href)}
-            {#if item.path === '/inbounds'}
+            {#if item.path === '/users'}
+            <div
+              class="relative shrink-0"
+              role="none"
+              onmouseenter={() => (usersMenu = true)}
+              onmouseleave={() => (usersMenu = false)}
+            >
+              <button
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={usersMenu}
+                class="-mb-px border-b-2 px-3 py-4 text-sm hover:text-foreground {router.location?.startsWith(
+                  '/users',
+                )
+                  ? 'border-primary font-medium text-foreground'
+                  : 'border-transparent text-muted-foreground'}"
+                onclick={() => (usersMenu = !usersMenu)}
+              >
+                {item.label} ▾
+              </button>
+              {#if usersMenu}
+                <div class="absolute left-0 top-full z-40 w-56 rounded-xl border bg-card p-1 shadow-lg">
+                  <a
+                    href="#/users"
+                    class="block rounded px-2 py-1.5 text-sm hover:bg-muted"
+                    onclick={() => (usersMenu = false)}>Юзеры</a
+                  >
+                  <button
+                    type="button"
+                    class="block w-full rounded px-2 py-1.5 text-left text-sm hover:bg-muted"
+                    onclick={() => {
+                      usersIntent.view = 'devices';
+                      usersMenu = false;
+                      window.location.hash = '#/users';
+                    }}>HWID / устройства</button
+                  >
+                </div>
+              {/if}
+            </div>
+          {:else if item.path === '/inbounds'}
               <div
                 class="relative shrink-0"
                 role="none"

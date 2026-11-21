@@ -206,6 +206,26 @@ func (h *Handlers) InboundMetrics(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"inbounds": list, "online_count": online})
 }
 
+// Devices serves GET /api/devices: every device sighting with an
+// online flag (seen within two poll intervals).
+func (h *Handlers) Devices(w http.ResponseWriter, r *http.Request) {
+	list, err := h.Store.DevicesOnline(time.Time{})
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "internal")
+		return
+	}
+	cutoff := time.Now().UTC().Add(-2 * h.currentInterval())
+	type row struct {
+		store.Device
+		Online bool `json:"online"`
+	}
+	out := make([]row, 0, len(list))
+	for _, d := range list {
+		out = append(out, row{Device: d, Online: !d.LastSeen.Before(cutoff)})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 // StatsOnline serves GET /api/stats/online: devices seen within the
 // last two poll intervals.
 func (h *Handlers) StatsOnline(w http.ResponseWriter, r *http.Request) {

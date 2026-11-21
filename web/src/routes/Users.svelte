@@ -3,6 +3,7 @@
   import { apiFetch } from '$lib/api';
   import { Button } from '$lib/components/ui/button';
   import UserDialog from '$lib/components/UserDialog.svelte';
+  import { usersIntent } from '$lib/usersIntent.svelte';
 
   type UserRow = {
     id: number;
@@ -23,6 +24,33 @@
   let dialog = $state<'create' | UserRow | null>(null);
   let sub = $state<{ username: string; url: string; formats: string[] } | null>(null);
   let copied = $state(false);
+  // HWID/устройства: отдельный вид из меню вкладки «Юзеры».
+  type DeviceRow = { Username: string; IP: string; FirstSeen: string; LastSeen: string; online: boolean };
+  let showDevices = $state(false);
+  let devices = $state<DeviceRow[]>([]);
+  let devicesErr = $state('');
+
+  async function loadDevices() {
+    try {
+      const res = await apiFetch('/api/devices');
+      if (!res.ok) {
+        devicesErr = `Не удалось загрузить устройства (${res.status})`;
+        return;
+      }
+      devices = (await res.json()) as DeviceRow[];
+      devicesErr = '';
+    } catch {
+      devicesErr = 'Сеть недоступна';
+    }
+  }
+
+  // Намерение из шапки: одноразовое действие при переходе на страницу.
+  $effect(() => {
+    if (usersIntent.view !== 'devices') return;
+    usersIntent.view = null;
+    showDevices = true;
+    void loadDevices();
+  });
 
   const statusLabels: Record<string, string> = {
     quota: 'Квота',
@@ -140,6 +168,7 @@
 {/if}
 
 <!-- Счётчики по статусам -->
+{#if !showDevices}
 <div class="mt-4 grid gap-3 sm:grid-cols-3 xl:grid-cols-5">
   <div class="flex items-center gap-3 rounded-xl border bg-card px-4 py-3">
     <span class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-sky-500/10 text-sky-400">
@@ -271,6 +300,56 @@
     </tbody>
   </table>
 </div>
+
+{:else}
+  <div class="mt-4 rounded-xl border border-sky-500/20 bg-sky-500/5 p-4">
+    <div class="flex items-center justify-between">
+      <h2 class="font-medium">HWID / устройства</h2>
+      <div class="flex gap-2">
+        <Button size="xs" variant="outline" onclick={loadDevices}>Обновить</Button>
+        <Button size="xs" variant="outline" onclick={() => (showDevices = false)}>К списку</Button>
+      </div>
+    </div>
+    {#if devicesErr}
+      <p class="mt-2 text-sm text-red-400">{devicesErr}</p>
+    {/if}
+    <div class="mt-3 overflow-x-auto rounded-lg border">
+      <table class="w-full text-sm">
+        <thead class="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+          <tr>
+            <th class="px-3 py-2 font-medium">Юзер</th>
+            <th class="px-3 py-2 font-medium">HWID / IP</th>
+            <th class="px-3 py-2 font-medium">Первый вход</th>
+            <th class="px-3 py-2 font-medium">Активность</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each devices as d (d.Username + d.IP)}
+            <tr class="border-t hover:bg-muted/30">
+              <td class="px-3 py-2">
+                <div class="flex items-center gap-2">
+                  <span
+                    class="h-2.5 w-2.5 shrink-0 rounded-full {d.online ? 'bg-emerald-400' : 'bg-red-400'}"
+                  ></span>
+                  <span class="font-medium">{d.Username}</span>
+                </div>
+              </td>
+              <td class="px-3 py-2 font-mono text-xs">{d.IP}</td>
+              <td class="px-3 py-2 text-muted-foreground">{fmtDate(d.FirstSeen)}</td>
+              <td class="px-3 py-2">
+                <div class="text-xs uppercase tracking-wide text-muted-foreground">
+                  {fmtAgo(d.LastSeen)}
+                </div>
+              </td>
+            </tr>
+          {:else}
+            <tr><td class="px-3 py-2 text-muted-foreground" colspan="4">Устройств пока нет</td></tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{/if}
 
 {#if sub}
   <div class="mt-4 rounded-xl border border-sky-500/20 bg-sky-500/5 p-4">
