@@ -108,6 +108,38 @@ func TestGenerateGolden(t *testing.T) {
 	}
 }
 
+// TestGenerateVlessDecryption: xray 26.x rejects vless inbounds whose
+// settings lack decryption:"none". GenerateConfig must inject it for
+// vless inbounds only — never for other protocols (e.g. dokodemo-door).
+func TestGenerateVlessDecryption(t *testing.T) {
+	inbounds := []store.Inbound{
+		{ID: 1, Tag: "vless-nodec", Enabled: true, ConfigJSON: `{
+			"tag": "vless-nodec", "listen": "0.0.0.0", "port": 8444,
+			"protocol": "vless", "settings": {"clients": []},
+			"streamSettings": {"network": "tcp"}
+		}`, CreatedAt: time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)},
+		{ID: 2, Tag: "dokodemo-in", Enabled: true, ConfigJSON: `{
+			"tag": "dokodemo-in", "listen": "127.0.0.1", "port": 8445,
+			"protocol": "dokodemo-door", "settings": {"address": "127.0.0.1"}
+		}`, CreatedAt: time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)},
+	}
+	cfg, err := GenerateConfig(inbounds, nil, "", "", testAPIPort)
+	if err != nil {
+		t.Fatalf("GenerateConfig(): %v", err)
+	}
+	got := map[string]map[string]any{}
+	for _, ib := range unmarshalAny(t, cfg, "generated").(map[string]any)["inbounds"].([]any) {
+		m := ib.(map[string]any)
+		got[m["tag"].(string)] = m["settings"].(map[string]any)
+	}
+	if got["vless-nodec"]["decryption"] != "none" {
+		t.Errorf("vless settings.decryption = %v, want \"none\"", got["vless-nodec"]["decryption"])
+	}
+	if _, ok := got["dokodemo-in"]["decryption"]; ok {
+		t.Errorf("dokodemo-door settings has decryption %v, want none injected", got["dokodemo-in"]["decryption"])
+	}
+}
+
 func TestGenerateInjectsOnlyActive(t *testing.T) {
 	users := append(testUsers(), store.User{
 		ID: 3, Username: "mallory", UUID: "33333333-3333-4333-8333-333333333333",

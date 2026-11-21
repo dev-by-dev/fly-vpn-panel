@@ -1,7 +1,6 @@
 package xray
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -12,7 +11,8 @@ import (
 )
 
 // Validate writes cfg to a temp file and runs `xray run -test -c <file>`.
-// xray's stderr is embedded in the returned error.
+// xray writes config errors to STDOUT, so both streams (CombinedOutput)
+// are embedded in the returned error.
 func Validate(binPath string, cfg []byte) error {
 	tmp, err := os.CreateTemp("", "flypanel-validate-*.json")
 	if err != nil {
@@ -29,14 +29,13 @@ func Validate(binPath string, cfg []byte) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	var stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, binPath, "run", "-test", "-c", tmp.Name())
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
+	out, err := cmd.CombinedOutput()
+	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return fmt.Errorf("validate: timed out after 10s: %s", strings.TrimSpace(stderr.String()))
+			return fmt.Errorf("validate: timed out after 10s: %s", strings.TrimSpace(string(out)))
 		}
-		return fmt.Errorf("validate: %w: %s", err, strings.TrimSpace(stderr.String()))
+		return fmt.Errorf("validate: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }
