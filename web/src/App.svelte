@@ -58,9 +58,16 @@
         <nav class="flex flex-1 items-center gap-1">
           {#each nav as item (item.href)}
             {#if item.path === '/inbounds'}
-              <div class="relative shrink-0">
+              <div
+                class="relative shrink-0"
+                role="none"
+                onmouseenter={() => (inbMenu = true)}
+                onmouseleave={() => (inbMenu = false)}
+              >
                 <button
                   type="button"
+                  aria-haspopup="menu"
+                  aria-expanded={inbMenu}
                   class="-mb-px border-b-2 px-3 py-4 text-sm hover:text-foreground {router.location?.startsWith(
                     '/inbounds',
                   )
