@@ -25,24 +25,16 @@ func (s *Store) DeviceUpsert(username, ip string, meta DeviceMeta, now time.Time
 	// xray знает только IP: обновляем last_seen у всех устройств этого IP,
 	// включая строки с HWID, иначе они «стареют» и висят оффлайн.
 	if meta.HWID == "" {
-		res, err := s.DB().Exec(`UPDATE devices SET last_seen = ? WHERE username = ? AND ip = ?`, ts, username, ip)
-		if err != nil {
-			return fmt.Errorf("device upsert: %w", err)
-		}
-		n, err := res.RowsAffected()
-		if err != nil {
-			return fmt.Errorf("device upsert: rows affected: %w", err)
-		}
-		if n > 0 {
-			return nil
-		}
-		_, err = s.DB().Exec(`INSERT INTO devices (username, ip, first_seen, last_seen) VALUES (?, ?, ?, ?)`,
-			username, ip, ts, ts)
+		// xray знает только IP: обновляем last_seen всем устройствам этого
+		// IP, включая строки с HWID. Пустых строк не создаём — иначе в
+		// списке появляются «устройства» без платформы и клиента.
+		_, err := s.DB().Exec(`UPDATE devices SET last_seen = ? WHERE username = ? AND ip = ?`, ts, username, ip)
 		if err != nil {
 			return fmt.Errorf("device upsert: %w", err)
 		}
 		return nil
 	}
+
 	// Клиент прислал HWID — ключ устройства именно он.
 	var id int64
 	err := s.DB().QueryRow(`SELECT id FROM devices WHERE username = ? AND hwid = ?`, username, meta.HWID).Scan(&id)
