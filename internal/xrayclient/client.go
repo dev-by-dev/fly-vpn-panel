@@ -92,6 +92,8 @@ func (c *Client) queryCounter(name string) (int64, error) {
 }
 
 // OnlineUsers returns the emails of all currently online users.
+// GetAllOnlineUsers answers with full counter names ("user>>><email>>>online"),
+// so the bare email is extracted; malformed entries are skipped.
 func (c *Client) OnlineUsers() ([]string, error) {
 	ctx, cancel := ctx()
 	defer cancel()
@@ -99,7 +101,14 @@ func (c *Client) OnlineUsers() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return resp.Users, nil
+	emails := make([]string, 0, len(resp.Users))
+	for _, u := range resp.Users {
+		parts := strings.Split(u, ">>>")
+		if len(parts) == 3 && parts[0] == "user" && parts[2] == "online" {
+			emails = append(emails, parts[1])
+		}
+	}
+	return emails, nil
 }
 
 // OnlineIPs returns the IPs a user is currently connected from, sorted.
