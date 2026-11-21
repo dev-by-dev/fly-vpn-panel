@@ -8,6 +8,7 @@
   // xray Status has no json tags → Go field names capitalized; Uptime = ns.
   type XrayStatus = { Running: boolean; PID: number; Uptime: number; Restarts: number; Version: string };
   type Summary = { total_up: number; total_down: number; online_count: number };
+  type Device = { Username: string; IP: string; FirstSeen: string; LastSeen: string };
   type SystemStats = {
     cpu_used_percent: number;
     cpu_cores: number;
@@ -21,6 +22,7 @@
   let range = $state<'day' | 'week' | 'month'>('day');
   let user = $state('');
   let users = $state<{ username: string }[]>([]);
+  let devices = $state<Device[]>([]);
   let buckets = $state<Bucket[]>([]);
   // Режим реального времени: сырые сэмплы поллера (байты за интервал), опрос каждые 5 с.
   let live = $state(false);
@@ -31,6 +33,10 @@
   let sys = $state<SystemStats | null>(null);
   let error = $state('');
   let busy = $state('');
+
+  function fmtDate(iso: string): string {
+    return new Date(iso).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'medium' });
+  }
 
   async function loadTraffic() {
     try {
@@ -77,12 +83,14 @@
 
   async function loadRest() {
     try {
-      const [st, sum, us, sy] = await Promise.all([
+      const [dev, st, sum, us, sy] = await Promise.all([
+        apiFetch('/api/stats/online'),
         apiFetch('/api/xray/status'),
         apiFetch('/api/stats/summary'),
         apiFetch('/api/users'),
         apiFetch('/api/system'),
       ]);
+      if (dev.ok) devices = (await dev.json()) as Device[];
       if (st.ok) xray = (await st.json()) as XrayStatus;
       if (sum.ok) summary = (await sum.json()) as Summary;
       if (us.ok) users = ((await us.json()) as { username: string }[]).slice(0, 100);
@@ -212,6 +220,37 @@
 </div>
 
 <!-- Summary totals -->
+<!-- Online devices -->
+<h2 class="mt-6 font-medium">Онлайн-устройства</h2>
+<div class="mt-3 flex flex-wrap gap-2">
+  {#each devices as d (d.Username + d.IP)}
+    <div class="flex items-center gap-3 rounded-lg border bg-card px-3 py-2">
+      <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="h-5 w-5"
+        >
+          <rect x="7" y="2" width="10" height="20" rx="2" />
+          <path d="M11 18h2" />
+        </svg>
+      </span>
+      <div class="min-w-0">
+        <div class="font-mono text-xs text-muted-foreground">{d.IP}</div>
+        <div class="text-lg font-semibold leading-none">{d.Username}</div>
+        <div class="mt-1 text-xs text-muted-foreground">{fmtDate(d.LastSeen)}</div>
+      </div>
+    </div>
+  {:else}
+    <p class="text-sm text-muted-foreground">Никого нет</p>
+  {/each}
+</div>
+
 <h2 class="mt-6 font-medium">Трафик панели</h2>
 <div class="mt-3 flex flex-wrap gap-2">
   <div class="rounded-lg border bg-card px-3 py-2">
