@@ -60,8 +60,13 @@ func TestQueryUserStats(t *testing.T) {
 	}
 }
 
+// GetAllOnlineUsers returns full counter names ("user>>><email>>>online"),
+// so OnlineUsers must extract and return the bare emails.
 func TestOnlineUsers(t *testing.T) {
-	f := &fakeXray{online: []string{"user1@example.com", "user2@example.com"}}
+	f := &fakeXray{online: []string{
+		"user>>>user1@example.com>>>online",
+		"user>>>user2@example.com>>>online",
+	}}
 	c := newBufconnClient(t, f)
 
 	users, err := c.OnlineUsers()
@@ -81,6 +86,24 @@ func TestOnlineUsers(t *testing.T) {
 		if !found {
 			t.Errorf("online user %q missing from %v", want, users)
 		}
+	}
+}
+
+// Malformed entries must be skipped, not returned or fatal.
+func TestOnlineUsersSkipsMalformed(t *testing.T) {
+	f := &fakeXray{online: []string{
+		"user>>>user1@example.com>>>online",
+		"user>>>email-with>>>extra>>>online", // email itself contained ">>>"
+		"not-a-counter",
+	}}
+	c := newBufconnClient(t, f)
+
+	users, err := c.OnlineUsers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(users) != 1 || users[0] != "user1@example.com" {
+		t.Fatalf("users = %v, want [user1@example.com]", users)
 	}
 }
 
