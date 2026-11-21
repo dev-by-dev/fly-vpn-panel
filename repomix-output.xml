@@ -32,7 +32,7 @@ The content is organized as follows:
 <notes>
 - Some files may have been excluded based on .gitignore rules and Repomix's configuration
 - Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
-- Files matching these patterns are excluded: .superpowers/**, bin/**, **/node_modules/**, backups/**, logs/**, data/**, coverage/**, **/*.db, **/*.db-*, **/*.bak-*, repomix-output.*
+- Files matching these patterns are excluded: .superpowers/**, bin/**, **/node_modules/**, backups/**, logs/**, data/**, coverage/**, **/*.db, **/*.db-*, **/*.bak-*, repomix-output.*, web/dist/assets/**
 - Files matching patterns in .gitignore are excluded
 - Files matching default ignore patterns are excluded
 - Files are sorted by Git change count (files with more changes are at the bottom)
@@ -143,6 +143,8 @@ internal/
 scripts/
   smoke.sh
 web/
+  dist/
+    index.html
   src/
     lib/
       components/
@@ -168,6 +170,7 @@ web/
         InboundForm.svelte
         TrafficChart.svelte
         UserDialog.svelte
+        UserDialog.test.ts
       api.test.ts
       api.ts
       auth.svelte.ts
@@ -209,6 +212,74 @@ README.md
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="web/src/lib/components/UserDialog.test.ts">
+import { test, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/svelte';
+import UserDialog from './UserDialog.svelte';
+
+// Anonymized fixture: quota-disabled user (checkbox starts unchecked).
+const quotaUser = {
+  id: 7,
+  username: 'carol',
+  expiry: '2027-01-01T00:00:00Z',
+  quota_bytes: 10737418240,
+  quota_period: 'month',
+  device_limit: 0,
+  disabled: true,
+  disabled_reason: 'quota',
+};
+
+let fetchMock: ReturnType<typeof vi.fn>;
+
+beforeEach(() => {
+  fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+  vi.stubGlobal('fetch', fetchMock);
+});
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+function submit() {
+  const form = document.querySelector('form');
+  if (!form) throw new Error('form not found');
+  fireEvent.submit(form);
+}
+
+function patchBody(): Record<string, unknown> {
+  const call = fetchMock.mock.calls.find(([u]) => String(u) === '/api/users/7');
+  if (!call) throw new Error('PATCH /api/users/7 not called');
+  return JSON.parse(String(call[1].body));
+}
+
+test('квота-отключённый юзер: чекбокс не тронут → disabled не отправляется', async () => {
+  render(UserDialog, {
+    props: { user: { ...quotaUser }, onsaved: () => {}, onclose: () => {} },
+  });
+
+  submit();
+  await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+
+  const body = patchBody();
+  expect('disabled' in body).toBe(false);
+  expect(body.quota_bytes).toBe(10737418240);
+});
+
+test('чекбокс переключен → disabled отправляется', async () => {
+  render(UserDialog, {
+    props: { user: { ...quotaUser }, onsaved: () => {}, onclose: () => {} },
+  });
+
+  await fireEvent.click(screen.getByRole('checkbox'));
+  submit();
+  await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+
+  const body = patchBody();
+  expect(body.disabled).toBe(true);
+});
+</file>
 
 <file path="cmd/flypanel/admin.go">
 package main
@@ -815,8 +886,11 @@ package api
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"flypanel/internal/auth"
 	"flypanel/internal/store"
 )
 
@@ -849,6 +923,50 @@ func TestSeedDefaultInboundVlessDecryption(t *testing.T) {
 	}
 	if _, ok := settings["clients"].([]any); !ok {
 		t.Errorf("seeded vless settings.clients = %T, want a JSON array", settings["clients"])
+	}
+}
+
+// TestSettingsGetTotpEnabled: GET /api/settings must expose
+// totp_enabled so the SPA renders the real 2FA state after a reload
+// (instead of session-local state that starts disabled).
+func TestSettingsGetTotpEnabled(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("store.Open(): %v", err)
+	}
+	defer st.Close()
+	h := &Handlers{Store: st}
+
+	get := func() map[string]any {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/api/settings", nil)
+		rr := httptest.NewRecorder()
+		h.SettingsGet(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("settings get: status %d, body %s", rr.Code, rr.Body.String())
+		}
+		var m map[string]any
+		if err := json.Unmarshal(rr.Body.Bytes(), &m); err != nil {
+			t.Fatalf("decode settings: %v", err)
+		}
+		return m
+	}
+
+	if v, ok := get()["totp_enabled"].(bool); !ok || v {
+		t.Fatalf("totp_enabled = %v, want false (2FA not enrolled)", get()["totp_enabled"])
+	}
+	if _, ok := get()["poll_interval_sec"]; !ok {
+		t.Fatal("poll_interval_sec missing from settings GET")
+	}
+
+	if err := auth.AdminInit(st, "admin", "long-enough-password-1"); err != nil {
+		t.Fatalf("AdminInit(): %v", err)
+	}
+	if err := st.AdminSetTOTP("JBSWY3DPEHPK3PXP", true); err != nil {
+		t.Fatalf("AdminSetTOTP(): %v", err)
+	}
+	if v, ok := get()["totp_enabled"].(bool); !ok || !v {
+		t.Fatalf("totp_enabled = %v, want true after enroll+verify", get()["totp_enabled"])
 	}
 }
 </file>
@@ -1060,8 +1178,11 @@ func TestSettingsWhitelist(t *testing.T) {
 	if got, _ := m["poll_interval_sec"].(float64); got != 60 {
 		t.Errorf("GET settings poll_interval_sec = %v, want 60", m["poll_interval_sec"])
 	}
-	if len(m) != 1 {
-		t.Errorf("GET settings leaked non-whitelisted keys: %v", m)
+	if len(m) != 2 {
+		t.Errorf("GET settings key count = %d, want 2 (poll_interval_sec, totp_enabled): %v", len(m), m)
+	}
+	if _, ok := m["totp_enabled"].(bool); !ok {
+		t.Errorf("GET settings totp_enabled = %T, want bool", m["totp_enabled"])
 	}
 }
 
@@ -2421,6 +2542,110 @@ func TestKeysRegen(t *testing.T) {
 	}
 }
 
+// TestPutNullRouting422: "null" is syntactically valid JSON but not a
+// routing object; the PUT must reject it with 422 BEFORE SettingSet, so
+// the old value survives and Apply never panics (a panic would skip the
+// rollback and brick the panel on every later apply).
+func TestPutNullRouting422(t *testing.T) {
+	env := newTestEnv(t, okValidate)
+	old := `{"domainStrategy":"AsIs","rules":[]}`
+	if rec := doJSON(t, env.srv, "PUT", "/api/config/routing", old); rec.Code != http.StatusOK {
+		t.Fatalf("seed routing: status %d, body %s", rec.Code, rec.Body.String())
+	}
+
+	rec := doJSON(t, env.srv, "PUT", "/api/config/routing", "null")
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("put null routing: status %d, want 422, body %s", rec.Code, rec.Body.String())
+	}
+	if errCode(t, rec) != "invalid_routing" {
+		t.Fatalf("error = %q, want invalid_routing", errCode(t, rec))
+	}
+	// The stored routing must be untouched (no SettingSet, no rollback).
+	rec = doJSON(t, env.srv, "GET", "/api/config/routing", "")
+	if rec.Body.String() != old {
+		t.Fatalf("routing after null put = %s, want %s", rec.Body.String(), old)
+	}
+
+	// Any other non-object value gets the same treatment.
+	rec = doJSON(t, env.srv, "PUT", "/api/config/routing", `[]`)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("put array routing: status %d, want 422, body %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestCreateRealityNoKeysAutogen: a freshly created Reality inbound
+// without keys would be rejected by `xray run -test` (apply → 502 on
+// every UI create); Create must generate the pair before storing.
+func TestCreateRealityNoKeysAutogen(t *testing.T) {
+	env := newTestEnv(t, okValidate)
+
+	body := `{"tag":"in-reality","enabled":true,"config":{"port":8443,"protocol":"vless","settings":{},` +
+		`"streamSettings":{"security":"reality","realitySettings":{"dest":"www.microsoft.com:443",` +
+		`"serverNames":["www.microsoft.com"],"shortIds":[""]}}}}`
+	rec := doJSON(t, env.srv, "POST", "/api/inbounds", body)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: status %d, body %s", rec.Code, rec.Body.String())
+	}
+	in := decodeInbound(t, rec)
+	var cfg map[string]any
+	if err := json.Unmarshal(in.Config, &cfg); err != nil {
+		t.Fatalf("decode created config: %v", err)
+	}
+	rs := realitySettings(cfg)
+	if rs == nil {
+		t.Fatal("realitySettings missing in created config")
+	}
+	priv, _ := rs["privateKey"].(string)
+	pub, _ := rs["publicKey"].(string)
+	if len(priv) != 43 || len(pub) != 43 {
+		t.Fatalf("auto-generated keys = %q/%q, want a 43-char X25519 pair", priv, pub)
+	}
+	if priv == pub {
+		t.Fatal("private and public key must differ")
+	}
+	db, err := env.st.InboundGet(in.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(db.ConfigJSON, priv) {
+		t.Fatalf("generated key not persisted: %s", db.ConfigJSON)
+	}
+	// The create applied: xray (fake) started exactly once.
+	waitStarts(t, env.counter, 1, 2*time.Second)
+}
+
+// TestPatchTagRenormalizesConfig: a tag-only patch must re-normalize
+// the stored config under the new tag so store tag == config tag
+// (membership sync depends on it).
+func TestPatchTagRenormalizesConfig(t *testing.T) {
+	env := newTestEnv(t, okValidate)
+	rec := doJSON(t, env.srv, "POST", "/api/inbounds",
+		`{"tag":"in-old","enabled":true,"config":{"port":443,"protocol":"vless","settings":{}}}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: status %d, body %s", rec.Code, rec.Body.String())
+	}
+	in := decodeInbound(t, rec)
+
+	rec = doJSON(t, env.srv, "PATCH", "/api/inbounds/"+strconv.FormatInt(in.ID, 10), `{"tag":"in-new"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("patch tag: status %d, body %s", rec.Code, rec.Body.String())
+	}
+	patched := decodeInbound(t, rec)
+	if patched.Tag != "in-new" {
+		t.Fatalf("tag = %q, want in-new", patched.Tag)
+	}
+	if tag, _ := configField(t, patched, "tag").(string); tag != "in-new" {
+		t.Fatalf("config tag = %q, want in-new (must follow the store tag)", tag)
+	}
+	db, err := env.st.InboundGet(in.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(db.ConfigJSON, `"tag":"in-new"`) {
+		t.Fatalf("db config tag not renormalized: %s", db.ConfigJSON)
+	}
+}
+
 func TestInboundApplyFailure502(t *testing.T) {
 	env := newTestEnv(t, failValidate)
 
@@ -2576,6 +2801,37 @@ func realitySettings(cfg map[string]any) map[string]any {
 	return rs
 }
 
+// ensureRealityKeys generates a Reality X25519 pair for a config whose
+// realitySettings has empty privateKey AND publicKey: xray refuses to
+// run a Reality inbound without keys, so a bare create would 502 on
+// apply. Any other shape is returned unchanged.
+func ensureRealityKeys(cfgJSON string) string {
+	var cfg map[string]any
+	if err := json.Unmarshal([]byte(cfgJSON), &cfg); err != nil {
+		return cfgJSON
+	}
+	rs := realitySettings(cfg)
+	if rs == nil {
+		return cfgJSON
+	}
+	priv, _ := rs["privateKey"].(string)
+	pub, _ := rs["publicKey"].(string)
+	if priv != "" || pub != "" {
+		return cfgJSON
+	}
+	newPriv, newPub, err := xray.NewKeyPair()
+	if err != nil {
+		return cfgJSON
+	}
+	rs["privateKey"] = newPriv
+	rs["publicKey"] = newPub
+	out, err := json.Marshal(cfg)
+	if err != nil {
+		return cfgJSON
+	}
+	return string(out)
+}
+
 // normalizeConfig validates and canonicalizes an inbound config: it must
 // be a JSON object with port 1–65535, and a Reality inbound must have a
 // non-empty dest. The panel tag is forced into the config because xray
@@ -2661,6 +2917,9 @@ func (h *Handlers) Create(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusBadRequest, code)
 		return
 	}
+	// A Reality inbound without keys is rejected by `xray run -test`;
+	// generate the pair up front so every create can apply.
+	cfgJSON = ensureRealityKeys(cfgJSON)
 	enabled := true
 	if req.Enabled != nil {
 		enabled = *req.Enabled
@@ -2721,6 +2980,16 @@ func (h *Handlers) Patch(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(req.Config) > 0 {
 		cfgJSON, code := normalizeConfig(req.Config, in.Tag)
+		if code != "" {
+			jsonError(w, http.StatusBadRequest, code)
+			return
+		}
+		in.ConfigJSON = cfgJSON
+	} else if req.Tag != nil {
+		// Tag-only patch: re-normalize the stored config under the new
+		// tag (normalizeConfig forces config tag) so store tag ==
+		// xray tag — membership sync depends on them matching.
+		cfgJSON, code := normalizeConfig(json.RawMessage(in.ConfigJSON), in.Tag)
 		if code != "" {
 			jsonError(w, http.StatusBadRequest, code)
 			return
@@ -2870,6 +3139,15 @@ func (h *Handlers) PutRouting(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusUnprocessableEntity, "invalid_json")
 		return
 	}
+	// "null" (or any non-object) is syntactically valid JSON but not a
+	// routing object: GenerateConfig would fail after the setting is
+	// committed, and a panic there skips the rollback entirely — so
+	// reject it with 422 BEFORE SettingSet.
+	var probe map[string]any
+	if err := json.Unmarshal(body, &probe); err != nil || probe == nil {
+		jsonError(w, http.StatusUnprocessableEntity, "invalid_routing")
+		return
+	}
 	old, hadOld, err := h.routing()
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "internal")
@@ -2906,6 +3184,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"testing"
@@ -2958,6 +3237,32 @@ func TestBackupCreatesAndPrunes(t *testing.T) {
 		}
 	}
 }
+
+// TestBackupSameDayRestartSkips: a same-day restart must silently keep
+// today's snapshot (VACUUM INTO refuses to overwrite an existing file),
+// not log a scary error.
+func TestBackupSameDayRestartSkips(t *testing.T) {
+	dataDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { st.Close() })
+
+	backupOnce(context.Background(), st, dataDir)
+	today := "panel-" + time.Now().UTC().Format("20060102") + ".db"
+	if _, err := os.Stat(filepath.Join(dataDir, "backups", today)); err != nil {
+		t.Fatalf("first backup missing: %v", err)
+	}
+
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	backupOnce(context.Background(), st, dataDir)
+	if s := buf.String(); s != "" {
+		t.Fatalf("same-day restart logged %q, want a silent skip", s)
+	}
+}
 </file>
 
 <file path="internal/stats/backup.go">
@@ -3004,9 +3309,9 @@ func RunBackup(ctx context.Context, st *store.Store, dataDir string) {
 }
 
 // backupOnce writes a VACUUM INTO snapshot for today and prunes old
-// copies down to backupsKeep. A same-day restart is a no-op: VACUUM
-// INTO refuses to overwrite an existing file, which is logged and
-// skipped — fine at a daily cadence.
+// copies down to backupsKeep. A same-day restart is a silent no-op:
+// today's file already exists, so there is nothing to write and
+// nothing to prune.
 func backupOnce(ctx context.Context, st *store.Store, dataDir string) {
 	if ctx.Err() != nil {
 		return
@@ -3017,6 +3322,9 @@ func backupOnce(ctx context.Context, st *store.Store, dataDir string) {
 		return
 	}
 	path := filepath.Join(dir, "panel-"+time.Now().UTC().Format("20060102")+".db")
+	if _, err := os.Stat(path); err == nil {
+		return // same-day restart: today's snapshot already exists
+	}
 	if _, err := st.DB().Exec(fmt.Sprintf("VACUUM INTO '%s'", path)); err != nil {
 		log.Printf("stats: backup %s: %v", path, err)
 		return
@@ -3362,6 +3670,57 @@ func TestPrune(t *testing.T) {
 	}
 }
 
+// hookStats wraps fakeStats and runs a one-shot hook inside the first
+// QueryUserStats call — simulating a concurrent admin PATCH landing
+// mid-tick, after the tick-start user snapshot was taken.
+type hookStats struct {
+	fakeStats
+	hook func()
+}
+
+func (h *hookStats) QueryUserStats(email string) (int64, int64, error) {
+	if h.hook != nil {
+		hook := h.hook
+		h.hook = nil
+		hook()
+	}
+	return h.fakeStats.QueryUserStats(email)
+}
+
+// TestRolloverPreservesConcurrentPatch: the rollover must write only
+// quota_reset_at (targeted update). A full-row UserUpdate from the
+// tick-start snapshot clobbers concurrent admin PATCHes, because the
+// per-user RPC steps take seconds.
+func TestRolloverPreservesConcurrentPatch(t *testing.T) {
+	st := openStore(t)
+	past := time.Now().Add(-48 * time.Hour)
+	mkUser(t, st, "iris@example.com", func(u *store.User) {
+		u.QuotaPeriod = "day"
+		u.QuotaResetAt = past
+		u.QuotaBytes = 100
+	})
+
+	fs := &hookStats{fakeStats: fakeStats{}}
+	fs.hook = func() {
+		// Admin PATCH racing the poll tick: quota raised mid-tick.
+		if _, err := st.DB().Exec(
+			`UPDATE users SET quota_bytes = 999 WHERE username = ?`, "iris@example.com"); err != nil {
+			t.Errorf("concurrent patch: %v", err)
+		}
+	}
+	p := NewPoller(st, fs, newFakeSync(), 30*time.Second)
+
+	p.tick(context.Background())
+
+	u := mustUser(t, st, "iris@example.com")
+	if u.QuotaBytes != 999 {
+		t.Fatalf("quota_bytes after rollover = %d, want 999 (concurrent PATCH must survive)", u.QuotaBytes)
+	}
+	if want := users.NextBoundary(past, "day"); !u.QuotaResetAt.Equal(want) {
+		t.Fatalf("quota_reset_at = %v, want %v", u.QuotaResetAt, want)
+	}
+}
+
 func TestTrafficBuckets(t *testing.T) {
 	st := openStore(t)
 	mkUser(t, st, "erin@example.com", nil)
@@ -3446,7 +3805,7 @@ func TestSummary(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	up, down, online, err := Summary(st)
+	up, down, online, err := Summary(st, 30*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3455,6 +3814,35 @@ func TestSummary(t *testing.T) {
 	}
 	if online != 1 {
 		t.Fatalf("online = %d, want 1 (distinct usernames)", online)
+	}
+}
+
+// TestSummaryInterval: the online window follows 2× the live poll
+// interval, not a hard-coded 60s — a 150s interval must count a device
+// seen 3 minutes ago as online.
+func TestSummaryInterval(t *testing.T) {
+	st := openStore(t)
+	mkUser(t, st, "hana@example.com", nil)
+	now := time.Now().UTC()
+	if err := st.DeviceUpsert("hana@example.com", "203.0.113.40", now.Add(-3*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+
+	// 150s interval → 300s window: the 3-minute-old sighting is online.
+	_, _, online, err := Summary(st, 150*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if online != 1 {
+		t.Fatalf("online(150s interval) = %d, want 1 (within the 2×150s window)", online)
+	}
+	// Short interval → narrow window: the same sighting is offline.
+	_, _, online, err = Summary(st, 30*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if online != 0 {
+		t.Fatalf("online(30s interval) = %d, want 0 (outside the 60s window)", online)
 	}
 }
 
@@ -3709,13 +4097,14 @@ func (p *Poller) tick(ctx context.Context) {
 }
 
 // apply persists one Decide action and mirrors it in xray membership.
-// Decide emits rollover before disable/enable, so the UserUpdate in the
-// rollover branch never rewrites a disable applied earlier.
+// Decide emits rollover before disable/enable, and the rollover branch
+// writes only quota_reset_at (targeted update), so it never rewrites a
+// disable applied earlier or a concurrent admin PATCH.
 func (p *Poller) apply(u *store.User, a users.Action, inbounds []store.Inbound) error {
 	switch a.Type {
 	case "rollover":
 		u.QuotaResetAt = users.NextBoundary(u.QuotaResetAt, u.QuotaPeriod)
-		return p.st.UserUpdate(u)
+		return p.st.UserSetQuotaResetAt(u.ID, u.QuotaResetAt)
 	case "disable":
 		if err := p.st.UserSetDisabled(u.ID, true, a.Reason); err != nil {
 			return err
@@ -3829,11 +4218,10 @@ func Traffic(st *store.Store, username, rng string) ([]store.Bucket, error) {
 }
 
 // Summary returns lifetime traffic totals and the online user count.
-// Online = a device sighting within 60s, i.e. 2× the 30s default poll
-// interval; the interval is not passed in, so a sensible default is
-// fixed here. shortcut: hard-coded 60s window, upgrade when Task 10
-// wires the live interval into the summary call.
-func Summary(st *store.Store) (totalUp, totalDown int64, onlineCount int, err error) {
+// Online = a device sighting within 2×interval (two poll intervals),
+// the same window /api/stats/online uses; the caller passes the live
+// poll interval so a longer interval does not undercount.
+func Summary(st *store.Store, interval time.Duration) (totalUp, totalDown int64, onlineCount int, err error) {
 	userList, err := st.UserList()
 	if err != nil {
 		return 0, 0, 0, err
@@ -3846,7 +4234,7 @@ func Summary(st *store.Store) (totalUp, totalDown int64, onlineCount int, err er
 		totalUp += up
 		totalDown += down
 	}
-	devices, err := st.DevicesOnline(time.Now().UTC().Add(-60 * time.Second))
+	devices, err := st.DevicesOnline(time.Now().UTC().Add(-2 * interval))
 	if err != nil {
 		return 0, 0, 0, err
 	}
@@ -5243,6 +5631,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 )
 
 const userCols = `id, username, uuid, sub_token, expiry, quota_bytes, quota_period,
@@ -5371,6 +5760,24 @@ func (s *Store) UserDelete(id int64) error {
 	}
 	if n, err := res.RowsAffected(); err != nil {
 		return fmt.Errorf("user delete: rows affected: %w", err)
+	} else if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// UserSetQuotaResetAt moves only the quota window start (rollover).
+// A full-row UserUpdate from a tick-start snapshot would clobber
+// concurrent admin PATCHes; this targeted write leaves every other
+// column untouched.
+func (s *Store) UserSetQuotaResetAt(id int64, resetAt time.Time) error {
+	res, err := s.DB().Exec(
+		`UPDATE users SET quota_reset_at = ? WHERE id = ?`, fmtTime(resetAt), id)
+	if err != nil {
+		return fmt.Errorf("user set quota reset at: %w", err)
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return fmt.Errorf("user set quota reset at: rows affected: %w", err)
 	} else if n == 0 {
 		return ErrNotFound
 	}
@@ -5866,18 +6273,25 @@ func (h *Handlers) Sub(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now().UTC()
-	if !u.Expiry.After(now) {
-		if !(u.Disabled && u.DisabledReason == "expired") {
-			if err := h.Store.UserSetDisabled(u.ID, true, "expired"); err != nil {
-				jsonError(w, http.StatusInternalServerError, "internal")
-				return
-			}
+	if u.Disabled {
+		// A disabled user is never re-tagged here: overwriting the
+		// reason (e.g. manual → expired) would let the poller
+		// auto-enable a manually disabled user once the expiry is
+		// extended. Only an "expired"-tagged user keeps the expired
+		// response so clients still see why they were cut off.
+		if u.DisabledReason == "expired" {
+			jsonError(w, http.StatusForbidden, "expired")
+			return
 		}
-		jsonError(w, http.StatusForbidden, "expired")
+		jsonError(w, http.StatusForbidden, "disabled")
 		return
 	}
-	if u.Disabled {
-		jsonError(w, http.StatusForbidden, "disabled")
+	if !u.Expiry.After(now) {
+		if err := h.Store.UserSetDisabled(u.ID, true, "expired"); err != nil {
+			jsonError(w, http.StatusInternalServerError, "internal")
+			return
+		}
+		jsonError(w, http.StatusForbidden, "expired")
 		return
 	}
 	format := r.PathValue("format")
@@ -6052,20 +6466,23 @@ func RenderJSON(inbounds []store.Inbound, u store.User, entryIP, templateJSON st
 			return nil, err
 		}
 		out := templateJSON
-		for k, v := range map[string]string{
-			"UUID":    u.UUID,
-			"ADDRESS": entryIP,
-			"PORT":    strconv.Itoa(p.Port),
-			"PBK":     p.PBK,
-			"SID":     p.SID,
-			"SNI":     p.SNI,
-			"FP":      p.FP,
-			"PATH":    p.Path,
-			"MODE":    p.Mode,
-			"TAG":     p.Tag,
-		} {
-			out = strings.ReplaceAll(out, "{{"+k+"}}", v)
-		}
+		// Single-pass replacer: substituted values are never re-scanned,
+		// so a value containing {{KEY}} stays verbatim (and trips the
+		// leftover-placeholder check below) instead of being
+		// re-substituted with that key's value.
+		repl := strings.NewReplacer(
+			"{{UUID}}", u.UUID,
+			"{{ADDRESS}}", entryIP,
+			"{{PORT}}", strconv.Itoa(p.Port),
+			"{{PBK}}", p.PBK,
+			"{{SID}}", p.SID,
+			"{{SNI}}", p.SNI,
+			"{{FP}}", p.FP,
+			"{{PATH}}", p.Path,
+			"{{MODE}}", p.Mode,
+			"{{TAG}}", p.Tag,
+		)
+		out = repl.Replace(out)
 		if strings.Contains(out, "{{") {
 			return nil, fmt.Errorf("rendered config %q: unresolved placeholder", p.Tag)
 		}
@@ -6204,6 +6621,7 @@ import (
 	"time"
 
 	"flypanel/internal/store"
+	"flypanel/internal/users"
 )
 
 // All fixtures are TEST-NET (203.0.113.x), example.com domains and
@@ -6598,6 +7016,67 @@ func TestSubAccess(t *testing.T) {
 	res = do(t, mux, "GET", "/sub/activetoken1/xml", "", "")
 	if res.StatusCode != 400 {
 		t.Errorf("bad format suffix: status = %d, want 400", res.StatusCode)
+	}
+}
+
+// TestSubManualDisabledPastExpiry: a manually disabled user whose expiry
+// has passed must keep disabled_reason "manual" — re-tagging to
+// "expired" would let the poller auto-enable them once the expiry is
+// extended (Decide enables only expired-tagged users).
+func TestSubManualDisabledPastExpiry(t *testing.T) {
+	st, mux := newTestServer(t)
+
+	u := &store.User{
+		Username: "manualuser", UUID: testUUID, SubToken: "manualtoken1",
+		Expiry: time.Now().Add(-time.Hour).UTC(), Disabled: true, DisabledReason: "manual",
+		CreatedAt: time.Now().UTC(),
+	}
+	if err := st.UserCreate(u); err != nil {
+		t.Fatal(err)
+	}
+
+	res := do(t, mux, "GET", "/sub/manualtoken1", "", "")
+	if res.StatusCode != http.StatusForbidden {
+		t.Fatalf("manual-disabled past-expiry: status = %d, want 403", res.StatusCode)
+	}
+	body, _ := io.ReadAll(res.Body)
+	if !strings.Contains(string(body), `"error":"disabled"`) {
+		t.Errorf("body = %q, want disabled", body)
+	}
+	after, err := st.UserGet(u.ID)
+	if err != nil || after.DisabledReason != "manual" {
+		t.Fatalf("reason after fetch = %q (err %v), want manual untouched", after.DisabledReason, err)
+	}
+
+	// Extending the expiry must not resurrect the user: the row stays
+	// disabled and Decide never emits enable for a manual disable.
+	after.Expiry = time.Now().Add(24 * time.Hour).UTC()
+	if err := st.UserUpdate(after); err != nil {
+		t.Fatal(err)
+	}
+	fresh, err := st.UserGet(u.ID)
+	if err != nil || !fresh.Disabled {
+		t.Fatalf("user after expiry extension: disabled=%v (err %v), want still disabled", fresh.Disabled, err)
+	}
+	for _, a := range users.Decide(*fresh, 0, nil, time.Now().UTC()) {
+		if a.Type == "enable" {
+			t.Fatalf("Decide emits enable for a manual disable: %+v", a)
+		}
+	}
+}
+
+// TestRenderJSONSinglePass: substitution must be a single pass. A value
+// containing another placeholder ({{TAG}} inside the path) must never be
+// re-substituted with that key's value — it surfaces as an unresolved
+// placeholder instead. Map iteration made this order-dependent, so every
+// attempt must behave identically.
+func TestRenderJSONSinglePass(t *testing.T) {
+	in := testInbound("in-a", 8443, "pbk_a", "sid_a", "a.example.com", "/x-{{TAG}}", "auto", "")
+	for i := 0; i < 20; i++ {
+		_, err := RenderJSON([]store.Inbound{in}, testUser(), testEntryIP, DefaultTemplate("json"))
+		if err == nil {
+			t.Fatalf("attempt %d: placeholder inside a value was re-substituted (multi-pass)", i)
+		}
 	}
 }
 
@@ -7460,6 +7939,19 @@ echo "GET /: built SPA with hashed assets"
 echo "PASS"
 </file>
 
+<file path="web/dist/index.html">
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>flypanel</title>
+  </head>
+  <body>
+    <p>build me</p>
+  </body>
+</html>
+</file>
+
 <file path="web/src/lib/components/ui/button/button.svelte">
 <script lang="ts" module>
 	import { type VariantProps, tv } from "tailwind-variants";
@@ -7874,9 +8366,10 @@ export {
   const xh0 = cfg0.streamSettings?.xhttpSettings ?? {};
 
   let tag = $state(inbound?.tag ?? '');
-  let port = $state<number>(cfg0.port ?? 443);
+  // Дефолты по спеке: 8443 и stream-up (443/auto ломали свежий inbound).
+  let port = $state<number>(cfg0.port ?? 8443);
   let path = $state<string>(xh0.path ?? '/xhttp');
-  let mode = $state<string>(xh0.mode ?? 'auto');
+  let mode = $state<string>(xh0.mode ?? 'stream-up');
   let dest = $state<string>(rs0.dest ?? 'www.microsoft.com:443');
   let serverNames = $state<string>((rs0.serverNames ?? []).join(','));
   let shortIds = $state<string>((rs0.shortIds ?? []).join(','));
@@ -8131,7 +8624,9 @@ export {
   let quotaGB = $state(user ? Number((user.quota_bytes / GB).toFixed(3)) : 0);
   let period = $state(user?.quota_period ?? 'none');
   let devices = $state(user?.device_limit ?? 0);
-  let manualOff = $state(user?.disabled && user.disabled_reason === 'manual');
+  // Чекбокс «Отключить вручную»: true только для manual-отключения.
+  const manualOff0 = user?.disabled && user.disabled_reason === 'manual';
+  let manualOff = $state(manualOff0);
   let error = $state('');
   let saving = $state(false);
 
@@ -8163,7 +8658,9 @@ export {
       device_limit: devices,
     };
     if (!isEdit) body.username = username.trim();
-    else body.disabled = manualOff; // username иммутабелен, не отправляем
+    // disabled шлём только если чекбокс меняли: иначе правка чужого поля
+    // ре-включит юзера, отключённого квотой/экспирацией.
+    else if (manualOff !== manualOff0) body.disabled = manualOff;
     saving = true;
     try {
       const res = await apiFetch(isEdit ? `/api/users/${user!.id}` : '/api/users', {
@@ -8420,11 +8917,15 @@ const enroll = {
   backup_codes: Array.from({ length: 10 }, (_, i) => `CODE-${i}`),
 };
 
+let totpEnabled = false;
+
 function mockFetch() {
   return vi.fn((input: string | URL, init?: RequestInit) => {
     const url = String(input);
     if (url === '/api/settings' && (!init || init.method === undefined || init.method === 'GET')) {
-      return Promise.resolve(new Response(JSON.stringify({ poll_interval_sec: 30 }), { status: 200 }));
+      return Promise.resolve(
+        new Response(JSON.stringify({ poll_interval_sec: 30, totp_enabled: totpEnabled }), { status: 200 })
+      );
     }
     if (url === '/api/auth/2fa/enroll') {
       return Promise.resolve(new Response(JSON.stringify(enroll), { status: 200 }));
@@ -8439,6 +8940,7 @@ function mockFetch() {
 let fetchMock: ReturnType<typeof mockFetch>;
 
 beforeEach(() => {
+  totpEnabled = false;
   fetchMock = mockFetch();
   vi.stubGlobal('fetch', fetchMock);
 });
@@ -8482,6 +8984,15 @@ test('verify: код отправляется на /api/auth/2fa/verify → вк
     expect(JSON.parse(String(call![1]!.body))).toEqual({ code: '123456' });
   });
   expect(await screen.findByText('2FA включена')).toBeTruthy();
+});
+
+test('состояние 2FA с сервера: totp_enabled=true → «2FA включена» без enroll', async () => {
+  totpEnabled = true;
+  render(Settings);
+
+  expect(await screen.findByText('2FA включена')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Подключить 2FA' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Отключить' })).toBeTruthy();
 });
 </file>
 
@@ -8574,10 +9085,22 @@ const bob = {
   online_count: 0,
 };
 
+// Disabled with an empty reason: must still render as disabled.
+const carol = {
+  ...alice,
+  id: 3,
+  username: 'carol',
+  disabled: true,
+  disabled_reason: '',
+  quota_bytes: 5368709120,
+  used_bytes: 0,
+  online_count: 0,
+};
+
 beforeEach(() => {
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockResolvedValue(new Response(JSON.stringify([alice, bob]), { status: 200 }))
+    vi.fn().mockResolvedValue(new Response(JSON.stringify([alice, bob, carol]), { status: 200 }))
   );
 });
 
@@ -8594,6 +9117,8 @@ test('рендер таблицы: 2 юзера, бейджи «Активен»
   // alice активна, bob отключён по квоте
   expect(screen.getByText('Активен')).toBeTruthy();
   expect(screen.getByText('Квота')).toBeTruthy();
+  // carol отключён без причины — не «Активен»
+  expect(screen.getByText('Отключён')).toBeTruthy();
   // трафик used/quota
   expect(screen.getByText('1.5 ГБ / 10 ГБ')).toBeTruthy();
   // онлайн-устройства
@@ -8889,7 +9414,9 @@ bin/
 /flypanel
 web/dist/*
 !web/dist/index.html
-dist/
+# /dist/ привязан к корню: без якоря web/dist/ игнорился бы целиком
+# и ре-включение !web/dist/index.html выше не работало.
+/dist/
 coverage/
 
 # Зависимости
@@ -9314,7 +9841,15 @@ func (h *Handlers) currentInterval() time.Duration {
 // SettingsGet serves GET /api/settings: whitelisted keys only.
 func (h *Handlers) SettingsGet(w http.ResponseWriter, r *http.Request) {
 	sec := int(h.currentInterval().Seconds())
-	writeJSON(w, http.StatusOK, map[string]int{pollIntervalKey: sec})
+	totp := false
+	admin, err := h.Store.AdminGet()
+	if err == nil {
+		totp = admin.TOTPEnabled
+	} else if !errors.Is(err, store.ErrNotFound) {
+		jsonError(w, http.StatusInternalServerError, "internal")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{pollIntervalKey: sec, "totp_enabled": totp})
 }
 
 // SettingsPut serves PUT /api/settings. Only poll_interval_sec is
@@ -9421,7 +9956,9 @@ func (h *Handlers) StatsOnline(w http.ResponseWriter, r *http.Request) {
 
 // StatsSummary serves GET /api/stats/summary.
 func (h *Handlers) StatsSummary(w http.ResponseWriter, r *http.Request) {
-	up, down, online, err := stats.Summary(h.Store)
+	// The live poll interval drives the online window (2× interval),
+	// matching /api/stats/online.
+	up, down, online, err := stats.Summary(h.Store, h.currentInterval())
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "internal")
 		return
@@ -10205,6 +10742,9 @@ func TestUserCreateValidation(t *testing.T) {
 		{"invalid expiry", `{"username":"bob","expiry":"not-a-time"}`},
 		{"invalid quota period", `{"username":"bob","expiry":"2027-06-01T00:00:00Z","quota_period":"hour"}`},
 		{"negative device limit", `{"username":"bob","expiry":"2027-06-01T00:00:00Z","device_limit":-1}`},
+		{"bad username charset arrows", `{"username":"bad>>>name","expiry":"2027-06-01T00:00:00Z"}`},
+		{"bad username charset space", `{"username":"user name","expiry":"2027-06-01T00:00:00Z"}`},
+		{"bad username charset cyrillic", `{"username":"юзер","expiry":"2027-06-01T00:00:00Z"}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -10214,6 +10754,44 @@ func TestUserCreateValidation(t *testing.T) {
 				t.Fatalf("status = %d, want 400, body %s", rec.Code, rec.Body.String())
 			}
 		})
+	}
+}
+
+// TestUserCreateUsernameCharset: usernames are the xray stats key; only
+// [A-Za-z0-9._@-] survives OnlineUsers extraction, so anything else is
+// rejected at the boundary.
+func TestUserCreateUsernameCharset(t *testing.T) {
+	_, srv := newTestServer(t, &fakeClient{})
+
+	// Charset edge cases that MUST be accepted.
+	for _, name := range []string{"alice", "user-1_x.y", "user@example.com", "A0.-_@"} {
+		rec := doJSON(t, srv, "POST", "/api/users",
+			`{"username":"`+name+`","expiry":"2027-06-01T00:00:00Z"}`)
+		if rec.Code != http.StatusCreated {
+			t.Errorf("username %q: status = %d, want 201, body %s", name, rec.Code, rec.Body.String())
+		}
+	}
+
+	// Anything outside the charset is rejected with invalid_username.
+	for _, name := range []string{"bad>>>name", "user name", "юзер", "semi;colon", "quo\"te"} {
+		b, err := json.Marshal(map[string]string{"username": name, "expiry": "2027-06-01T00:00:00Z"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rec := doJSON(t, srv, "POST", "/api/users", string(b))
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("username %q: status = %d, want 400, body %s", name, rec.Code, rec.Body.String())
+			continue
+		}
+		var e struct {
+			Error string `json:"error"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &e); err != nil {
+			t.Fatal(err)
+		}
+		if e.Error != "invalid_username" {
+			t.Errorf("username %q: error = %q, want invalid_username", name, e.Error)
+		}
 	}
 }
 
@@ -10520,6 +11098,24 @@ type patchRequest struct {
 
 var validPeriods = map[string]bool{"none": true, "day": true, "week": true, "month": true}
 
+// validUsername: usernames are the per-user key in xray's stats service
+// (OnlineUsers/QueryUserStats); anything outside [A-Za-z0-9._@-] breaks
+// counter extraction, so it is rejected at the boundary.
+func validUsername(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '.' || r == '_' || r == '@' || r == '-':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 const (
 	tokenAlphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 	tokenLen      = 16
@@ -10659,6 +11255,10 @@ func (h *Handlers) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Username == "" {
 		jsonError(w, http.StatusBadRequest, "username_required")
+		return
+	}
+	if !validUsername(req.Username) {
+		jsonError(w, http.StatusBadRequest, "invalid_username")
 		return
 	}
 	if req.QuotaPeriod == "" {
@@ -11246,8 +11846,10 @@ export function loginRequest(
   password: string,
   totp?: string
 ): Promise<Response> {
+  // Backend Login decodes json:"code" — the totp/backup value must be
+  // sent under `code` or 2FA login always fails.
   const body: Record<string, string> = totp
-    ? { username, password, totp }
+    ? { username, password, code: totp }
     : { username, password };
   return fetch('/api/auth/login', {
     method: 'POST',
@@ -11374,6 +11976,21 @@ test('login 2fa_required → need2fa state', async () => {
   expect(init.credentials).toBe('include');
   expect(init.headers['Content-Type']).toBe('application/json');
   expect(init.body).toBe(JSON.stringify({ username: 'admin', password: 'password123' }));
+});
+
+test('login with totp → body uses code key (backend expects code, not totp)', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response('{"ok":true}', { status: 200 }));
+  vi.stubGlobal('fetch', fetchMock);
+
+  const ok = await login('admin', 'password123', '123456');
+
+  expect(ok).toBe(true);
+  expect(authState.loggedIn).toBe(true);
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  const init = fetchMock.mock.calls[0][1];
+  expect(init.body).toBe(
+    JSON.stringify({ username: 'admin', password: 'password123', code: '123456' })
+  );
 });
 
 test('checkSession: expired access → refresh → retry → session restored', async () => {
@@ -11935,8 +12552,11 @@ test('checkSession: hard refresh failure → logged out', async () => {
     try {
       const res = await apiFetch('/api/settings');
       if (res.ok) {
-        const data = (await res.json()) as { poll_interval_sec: number };
+        const data = (await res.json()) as { poll_interval_sec: number; totp_enabled?: boolean };
         interval = String(data.poll_interval_sec);
+        // 2FA state comes from the server, not session-local memory,
+        // so a reload shows the real enabled state.
+        enabled = data.totp_enabled === true;
       }
     } catch {
       // не критично: останется значение по умолчанию
@@ -12166,12 +12786,17 @@ test('checkSession: hard refresh failure → logged out', async () => {
   let copied = $state(false);
 
   const statusLabels: Record<string, string> = {
-    '': 'Активен',
     quota: 'Квота',
     device_limit: 'Лимит устройств',
     expired: 'Истёк',
     manual: 'Отключён',
   };
+
+  // Отключённый юзер без причины всё равно «Отключён», не «Активен».
+  function statusLabel(u: UserRow): string {
+    if (!u.disabled) return 'Активен';
+    return statusLabels[u.disabled_reason] ?? 'Отключён';
+  }
 
   function fmtBytes(n: number): string {
     if (n <= 0) return '0 Б';
@@ -12271,7 +12896,7 @@ test('checkSession: hard refresh failure → logged out', async () => {
                 ? 'bg-red-500/15 text-red-400'
                 : 'bg-emerald-500/15 text-emerald-400'}"
             >
-              {statusLabels[u.disabled_reason] ?? u.disabled_reason}
+              {statusLabel(u)}
             </span>
           </td>
           <td class="px-3 py-2">
@@ -12416,7 +13041,7 @@ Web Control Panel for VPN — self-hosted panel (Go backend, embedded Svelte 5 S
 
 ## Prerequisites
 
-- Go ≥ 1.22
+- Go ≥ 1.27
 - Node.js ≥ 20.19 (with npm) — for the web dashboard build
 - make
 
@@ -12533,6 +13158,24 @@ func postJSON(t *testing.T, h http.HandlerFunc, body any) *httptest.ResponseReco
 	}
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(b))
 	req.RemoteAddr = testIP
+	rr := httptest.NewRecorder()
+	h(rr, req)
+	return rr
+}
+
+// postJSONXFF is postJSON with an explicit RemoteAddr and optional
+// X-Forwarded-For header (reverse-proxy scenarios).
+func postJSONXFF(t *testing.T, h http.HandlerFunc, body any, remoteAddr, xff string) *httptest.ResponseRecorder {
+	t.Helper()
+	b, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(b))
+	req.RemoteAddr = remoteAddr
+	if xff != "" {
+		req.Header.Set("X-Forwarded-For", xff)
+	}
 	rr := httptest.NewRecorder()
 	h(rr, req)
 	return rr
@@ -12740,6 +13383,76 @@ func TestLoginRateLimit(t *testing.T) {
 	})
 	if rr.Code != http.StatusTooManyRequests {
 		t.Fatalf("6th request status = %d, want 429", rr.Code)
+	}
+}
+
+// TestLoginRateLimitXFF: behind the reverse proxy every client shares
+// RemoteAddr 127.0.0.1; the limiter must key on the LAST
+// X-Forwarded-For IP (loopback only) so clients get independent
+// budgets instead of one shared global 5/min limit. The proxy appends
+// the real peer IP to any client-supplied XFF, so a spoofed FIRST
+// entry must be ignored — rotating it must not grant a fresh budget.
+func TestLoginRateLimitXFF(t *testing.T) {
+	h := newTestEnv(t)
+	createAdmin(t, h.Store, "a-sufficiently-long-password")
+	const loopback = "127.0.0.1:5555"
+	creds := func() map[string]string {
+		return map[string]string{"username": "admin", "password": "wrong-password-xxx"}
+	}
+
+	for i := 0; i < 5; i++ {
+		rr := postJSONXFF(t, h.Login, creds(), loopback, "203.0.113.20")
+		if rr.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt #%d status = %d, want 401", i+1, rr.Code)
+		}
+	}
+	// Same X-FF: that client's budget is exhausted.
+	if rr := postJSONXFF(t, h.Login, creds(), loopback, "203.0.113.20"); rr.Code != http.StatusTooManyRequests {
+		t.Fatalf("6th same-XFF status = %d, want 429", rr.Code)
+	}
+	// A different X-FF client has an independent budget: 401, not 429.
+	if rr := postJSONXFF(t, h.Login, creds(), loopback, "198.51.100.30"); rr.Code != http.StatusUnauthorized {
+		t.Fatalf("different XFF status = %d, want 401 (independent rate limit)", rr.Code)
+	}
+	// Spoofed FIRST entry with the exhausted real client LAST: the proxy
+	// appends the real IP, so the limiter must key on the last entry and
+	// still 429 — rotating the spoofed first entry grants no fresh budget.
+	if rr := postJSONXFF(t, h.Login, creds(), loopback, "198.51.100.77, 203.0.113.20"); rr.Code != http.StatusTooManyRequests {
+		t.Fatalf("spoofed-first XFF status = %d, want 429 (last entry is the key)", rr.Code)
+	}
+	// Off-loopback RemoteAddr must ignore XFF entirely: this fresh
+	// client reuses the exhausted XFF value and must not be 429'd by it.
+	if rr := postJSONXFF(t, h.Login, creds(), "203.0.113.99:6666", "203.0.113.20"); rr.Code != http.StatusUnauthorized {
+		t.Fatalf("direct client status = %d, want 401 (XFF ignored off-loopback)", rr.Code)
+	}
+}
+
+// TestEnroll2FAAlreadyEnabled: re-running enroll while 2FA is on calls
+// AdminSetTOTP(secret,false) and would silently disable 2FA without a
+// code; it must 409 and require disable-with-code first.
+func TestEnroll2FAAlreadyEnabled(t *testing.T) {
+	h := newTestEnv(t)
+	createAdmin(t, h.Store, "a-sufficiently-long-password")
+	secret, _, err := EnrollTOTP("admin")
+	if err != nil {
+		t.Fatalf("EnrollTOTP(): %v", err)
+	}
+	if err := h.Store.AdminSetTOTP(secret, true); err != nil {
+		t.Fatalf("AdminSetTOTP(): %v", err)
+	}
+
+	rr := postJSON(t, h.Enroll2FA, map[string]string{})
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("enroll-while-enabled status = %d (%s), want 409", rr.Code, rr.Body.String())
+	}
+	// 2FA must still be enabled and the secret untouched afterwards.
+	admin, err := h.Store.AdminGet()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !admin.TOTPEnabled || admin.TOTPSecret != secret {
+		t.Fatalf("admin after rejected enroll: enabled=%v secret=%q, want untouched",
+			admin.TOTPEnabled, admin.TOTPSecret)
 	}
 }
 
@@ -13010,10 +13723,7 @@ func (h *Handlers) clearAuthCookies(w http.ResponseWriter) {
 // (if 2FA is enabled) a TOTP or single-use backup code. On success it sets
 // the fp_access and fp_refresh cookies.
 func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		ip = r.RemoteAddr
-	}
+	ip := clientIP(r)
 	if !h.RL.Allow(ip) {
 		jsonError(w, http.StatusTooManyRequests, "rate_limited")
 		return
@@ -13126,6 +13836,13 @@ func (h *Handlers) Enroll2FA(w http.ResponseWriter, r *http.Request) {
 	admin, err := h.Store.AdminGet()
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "internal")
+		return
+	}
+	// Enroll writes AdminSetTOTP(secret,false); re-running it while 2FA
+	// is enabled would silently turn 2FA off without a code. Disable
+	// (with a valid code) must come first.
+	if admin.TOTPEnabled {
+		jsonError(w, http.StatusConflict, "already_enabled")
 		return
 	}
 	secret, uri, err := EnrollTOTP(admin.Username)
@@ -13263,6 +13980,29 @@ func (h *Handlers) ChangePassword(w http.ResponseWriter, r *http.Request) {
 // base32; TOTP codes are digits).
 func normalizeCode(s string) string {
 	return strings.ToUpper(strings.TrimSpace(s))
+}
+
+// clientIP is the rate-limit key. When the request arrives from a
+// loopback RemoteAddr (the reverse proxy on the same host), the real
+// client is the LAST X-Forwarded-For entry: a proxy appends the peer IP
+// to any client-supplied XFF ("spoofed, real"), so the first entry is
+// attacker-controlled and must not be trusted. Keying on 127.0.0.1
+// would share one global 5/min budget across all clients. XFF is
+// trusted ONLY from loopback; a direct client keeps its own address.
+func clientIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			parts := strings.Split(xff, ",")
+			if last := strings.TrimSpace(parts[len(parts)-1]); last != "" {
+				return last
+			}
+		}
+	}
+	return host
 }
 
 // AdminInit creates the single admin account with an argon2id hash. It is
@@ -13908,15 +14648,21 @@ func serveCommand() {
 	go poller.Run(ctx)
 	go stats.RunBackup(ctx, st, cfg.DataDir)
 
-	srv := &http.Server{Addr: cfg.ListenAddr, Handler: api.NewRouter(api.Deps{
-		Store:   st,
-		JWT:     auth.NewJWT(key),
-		RL:      auth.NewRateLimiter(5, time.Minute),
-		Client:  xc,
-		Manager: mgr,
-		Cfg:     cfg,
-		Poller:  poller,
-	})}
+	srv := &http.Server{
+		Addr: cfg.ListenAddr,
+		Handler: api.NewRouter(api.Deps{
+			Store:   st,
+			JWT:     auth.NewJWT(key),
+			RL:      auth.NewRateLimiter(5, time.Minute),
+			Client:  xc,
+			Manager: mgr,
+			Cfg:     cfg,
+			Poller:  poller,
+		}),
+		// Bound header reads so slow/idle connections cannot pin
+		// goroutines forever (slowloris).
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -14890,7 +15636,9 @@ func ensureAPIRule(routing map[string]any) {
 }
 
 // parseRouting decodes routingJSON, substituting the default for an empty
-// string and failing on invalid JSON.
+// string, failing on invalid JSON and rejecting non-object values —
+// JSON null unmarshals into a nil map with a nil error, and
+// ensureAPIRule would assign into that nil map and panic.
 func parseRouting(routingJSON string) (map[string]any, error) {
 	if routingJSON == "" {
 		routingJSON = defaultRouting
@@ -14899,6 +15647,9 @@ func parseRouting(routingJSON string) (map[string]any, error) {
 	if err := json.Unmarshal([]byte(routingJSON), &routing); err != nil {
 		return nil, fmt.Errorf("routing: %w", err)
 	}
+	if routing == nil {
+		return nil, fmt.Errorf("routing: must be a JSON object")
+	}
 	return routing, nil
 }
 </file>
@@ -14906,7 +15657,7 @@ func parseRouting(routingJSON string) (map[string]any, error) {
 <file path="go.mod">
 module flypanel
 
-go 1.27.3
+go 1.27
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
@@ -15278,6 +16029,15 @@ func TestGenerateEmptyRouting(t *testing.T) {
 func TestGenerateBadRouting(t *testing.T) {
 	if _, err := GenerateConfig(testInbounds(), nil, "{not json", "", testAPIPort); err == nil {
 		t.Error("GenerateConfig(bad routing) = nil error, want error")
+	}
+}
+
+// TestGenerateNullRouting: JSON null unmarshals into a nil map with a
+// nil error; parseRouting must reject it, otherwise ensureAPIRule
+// assigns into the nil map and panics.
+func TestGenerateNullRouting(t *testing.T) {
+	if _, err := GenerateConfig(testInbounds(), nil, "null", "", testAPIPort); err == nil {
+		t.Fatal("GenerateConfig(routing null) = nil error, want error (must be a JSON object)")
 	}
 }
 
