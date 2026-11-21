@@ -102,10 +102,7 @@ func (h *Handlers) clearAuthCookies(w http.ResponseWriter) {
 // (if 2FA is enabled) a TOTP or single-use backup code. On success it sets
 // the fp_access and fp_refresh cookies.
 func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		ip = r.RemoteAddr
-	}
+	ip := clientIP(r)
 	if !h.RL.Allow(ip) {
 		jsonError(w, http.StatusTooManyRequests, "rate_limited")
 		return
@@ -218,6 +215,13 @@ func (h *Handlers) Enroll2FA(w http.ResponseWriter, r *http.Request) {
 	admin, err := h.Store.AdminGet()
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "internal")
+		return
+	}
+	// Enroll writes AdminSetTOTP(secret,false); re-running it while 2FA
+	// is enabled would silently turn 2FA off without a code. Disable
+	// (with a valid code) must come first.
+	if admin.TOTPEnabled {
+		jsonError(w, http.StatusConflict, "already_enabled")
 		return
 	}
 	secret, uri, err := EnrollTOTP(admin.Username)
@@ -355,6 +359,26 @@ func (h *Handlers) ChangePassword(w http.ResponseWriter, r *http.Request) {
 // base32; TOTP codes are digits).
 func normalizeCode(s string) string {
 	return strings.ToUpper(strings.TrimSpace(s))
+}
+
+// clientIP is the rate-limit key. When the request arrives from a
+// loopback RemoteAddr (the reverse proxy on the same host), the first
+// X-Forwarded-For IP is the real client — keying on 127.0.0.1 there
+// would share one global 5/min budget across all clients. XFF is
+// trusted ONLY from loopback; a direct client keeps its own address.
+func clientIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			if first := strings.TrimSpace(strings.SplitN(xff, ",", 2)[0]); first != "" {
+				return first
+			}
+		}
+	}
+	return host
 }
 
 // AdminInit creates the single admin account with an argon2id hash. It is

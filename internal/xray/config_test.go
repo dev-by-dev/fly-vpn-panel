@@ -326,6 +326,15 @@ func TestGenerateBadRouting(t *testing.T) {
 	}
 }
 
+// TestGenerateNullRouting: JSON null unmarshals into a nil map with a
+// nil error; parseRouting must reject it, otherwise ensureAPIRule
+// assigns into the nil map and panics.
+func TestGenerateNullRouting(t *testing.T) {
+	if _, err := GenerateConfig(testInbounds(), nil, "null", "", testAPIPort); err == nil {
+		t.Fatal("GenerateConfig(routing null) = nil error, want error (must be a JSON object)")
+	}
+}
+
 func TestGenerateNoEgress(t *testing.T) {
 	cfg, err := GenerateConfig(testInbounds(), nil, "", "", testAPIPort)
 	if err != nil {

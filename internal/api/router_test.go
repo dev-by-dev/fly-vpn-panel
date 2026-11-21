@@ -204,8 +204,11 @@ func TestSettingsWhitelist(t *testing.T) {
 	if got, _ := m["poll_interval_sec"].(float64); got != 60 {
 		t.Errorf("GET settings poll_interval_sec = %v, want 60", m["poll_interval_sec"])
 	}
-	if len(m) != 1 {
-		t.Errorf("GET settings leaked non-whitelisted keys: %v", m)
+	if len(m) != 2 {
+		t.Errorf("GET settings key count = %d, want 2 (poll_interval_sec, totp_enabled): %v", len(m), m)
+	}
+	if _, ok := m["totp_enabled"].(bool); !ok {
+		t.Errorf("GET settings totp_enabled = %T, want bool", m["totp_enabled"])
 	}
 }
 

@@ -60,7 +60,15 @@ func (h *Handlers) currentInterval() time.Duration {
 // SettingsGet serves GET /api/settings: whitelisted keys only.
 func (h *Handlers) SettingsGet(w http.ResponseWriter, r *http.Request) {
 	sec := int(h.currentInterval().Seconds())
-	writeJSON(w, http.StatusOK, map[string]int{pollIntervalKey: sec})
+	totp := false
+	admin, err := h.Store.AdminGet()
+	if err == nil {
+		totp = admin.TOTPEnabled
+	} else if !errors.Is(err, store.ErrNotFound) {
+		jsonError(w, http.StatusInternalServerError, "internal")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{pollIntervalKey: sec, "totp_enabled": totp})
 }
 
 // SettingsPut serves PUT /api/settings. Only poll_interval_sec is
@@ -167,7 +175,9 @@ func (h *Handlers) StatsOnline(w http.ResponseWriter, r *http.Request) {
 
 // StatsSummary serves GET /api/stats/summary.
 func (h *Handlers) StatsSummary(w http.ResponseWriter, r *http.Request) {
-	up, down, online, err := stats.Summary(h.Store)
+	// The live poll interval drives the online window (2× interval),
+	// matching /api/stats/online.
+	up, down, online, err := stats.Summary(h.Store, h.currentInterval())
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "internal")
 		return

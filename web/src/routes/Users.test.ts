@@ -30,10 +30,22 @@ const bob = {
   online_count: 0,
 };
 
+// Disabled with an empty reason: must still render as disabled.
+const carol = {
+  ...alice,
+  id: 3,
+  username: 'carol',
+  disabled: true,
+  disabled_reason: '',
+  quota_bytes: 5368709120,
+  used_bytes: 0,
+  online_count: 0,
+};
+
 beforeEach(() => {
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockResolvedValue(new Response(JSON.stringify([alice, bob]), { status: 200 }))
+    vi.fn().mockResolvedValue(new Response(JSON.stringify([alice, bob, carol]), { status: 200 }))
   );
 });
 
@@ -50,6 +62,8 @@ test('рендер таблицы: 2 юзера, бейджи «Активен»
   // alice активна, bob отключён по квоте
   expect(screen.getByText('Активен')).toBeTruthy();
   expect(screen.getByText('Квота')).toBeTruthy();
+  // carol отключён без причины — не «Активен»
+  expect(screen.getByText('Отключён')).toBeTruthy();
   // трафик used/quota
   expect(screen.getByText('1.5 ГБ / 10 ГБ')).toBeTruthy();
   // онлайн-устройства

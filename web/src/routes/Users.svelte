@@ -24,12 +24,17 @@
   let copied = $state(false);
 
   const statusLabels: Record<string, string> = {
-    '': 'Активен',
     quota: 'Квота',
     device_limit: 'Лимит устройств',
     expired: 'Истёк',
     manual: 'Отключён',
   };
+
+  // Отключённый юзер без причины всё равно «Отключён», не «Активен».
+  function statusLabel(u: UserRow): string {
+    if (!u.disabled) return 'Активен';
+    return statusLabels[u.disabled_reason] ?? 'Отключён';
+  }
 
   function fmtBytes(n: number): string {
     if (n <= 0) return '0 Б';
@@ -129,7 +134,7 @@
                 ? 'bg-red-500/15 text-red-400'
                 : 'bg-emerald-500/15 text-emerald-400'}"
             >
-              {statusLabels[u.disabled_reason] ?? u.disabled_reason}
+              {statusLabel(u)}
             </span>
           </td>
           <td class="px-3 py-2">

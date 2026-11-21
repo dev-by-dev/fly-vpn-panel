@@ -27,6 +27,21 @@ test('login 2fa_required → need2fa state', async () => {
   expect(init.body).toBe(JSON.stringify({ username: 'admin', password: 'password123' }));
 });
 
+test('login with totp → body uses code key (backend expects code, not totp)', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response('{"ok":true}', { status: 200 }));
+  vi.stubGlobal('fetch', fetchMock);
+
+  const ok = await login('admin', 'password123', '123456');
+
+  expect(ok).toBe(true);
+  expect(authState.loggedIn).toBe(true);
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  const init = fetchMock.mock.calls[0][1];
+  expect(init.body).toBe(
+    JSON.stringify({ username: 'admin', password: 'password123', code: '123456' })
+  );
+});
+
 test('checkSession: expired access → refresh → retry → session restored', async () => {
   const fetchMock = vi
     .fn()

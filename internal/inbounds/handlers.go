@@ -103,6 +103,37 @@ func realitySettings(cfg map[string]any) map[string]any {
 	return rs
 }
 
+// ensureRealityKeys generates a Reality X25519 pair for a config whose
+// realitySettings has empty privateKey AND publicKey: xray refuses to
+// run a Reality inbound without keys, so a bare create would 502 on
+// apply. Any other shape is returned unchanged.
+func ensureRealityKeys(cfgJSON string) string {
+	var cfg map[string]any
+	if err := json.Unmarshal([]byte(cfgJSON), &cfg); err != nil {
+		return cfgJSON
+	}
+	rs := realitySettings(cfg)
+	if rs == nil {
+		return cfgJSON
+	}
+	priv, _ := rs["privateKey"].(string)
+	pub, _ := rs["publicKey"].(string)
+	if priv != "" || pub != "" {
+		return cfgJSON
+	}
+	newPriv, newPub, err := xray.NewKeyPair()
+	if err != nil {
+		return cfgJSON
+	}
+	rs["privateKey"] = newPriv
+	rs["publicKey"] = newPub
+	out, err := json.Marshal(cfg)
+	if err != nil {
+		return cfgJSON
+	}
+	return string(out)
+}
+
 // normalizeConfig validates and canonicalizes an inbound config: it must
 // be a JSON object with port 1–65535, and a Reality inbound must have a
 // non-empty dest. The panel tag is forced into the config because xray
@@ -188,6 +219,9 @@ func (h *Handlers) Create(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusBadRequest, code)
 		return
 	}
+	// A Reality inbound without keys is rejected by `xray run -test`;
+	// generate the pair up front so every create can apply.
+	cfgJSON = ensureRealityKeys(cfgJSON)
 	enabled := true
 	if req.Enabled != nil {
 		enabled = *req.Enabled
@@ -248,6 +282,16 @@ func (h *Handlers) Patch(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(req.Config) > 0 {
 		cfgJSON, code := normalizeConfig(req.Config, in.Tag)
+		if code != "" {
+			jsonError(w, http.StatusBadRequest, code)
+			return
+		}
+		in.ConfigJSON = cfgJSON
+	} else if req.Tag != nil {
+		// Tag-only patch: re-normalize the stored config under the new
+		// tag (normalizeConfig forces config tag) so store tag ==
+		// xray tag — membership sync depends on them matching.
+		cfgJSON, code := normalizeConfig(json.RawMessage(in.ConfigJSON), in.Tag)
 		if code != "" {
 			jsonError(w, http.StatusBadRequest, code)
 			return
@@ -395,6 +439,15 @@ func (h *Handlers) PutRouting(w http.ResponseWriter, r *http.Request) {
 	}
 	if !json.Valid(body) {
 		jsonError(w, http.StatusUnprocessableEntity, "invalid_json")
+		return
+	}
+	// "null" (or any non-object) is syntactically valid JSON but not a
+	// routing object: GenerateConfig would fail after the setting is
+	// committed, and a panic there skips the rollback entirely — so
+	// reject it with 422 BEFORE SettingSet.
+	var probe map[string]any
+	if err := json.Unmarshal(body, &probe); err != nil || probe == nil {
+		jsonError(w, http.StatusUnprocessableEntity, "invalid_routing")
 		return
 	}
 	old, hadOld, err := h.routing()

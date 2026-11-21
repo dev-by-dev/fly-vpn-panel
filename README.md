@@ -4,7 +4,7 @@ Web Control Panel for VPN — self-hosted panel (Go backend, embedded Svelte 5 S
 
 ## Prerequisites
 
-- Go ≥ 1.22
+- Go ≥ 1.27
 - Node.js ≥ 20.19 (with npm) — for the web dashboard build
 - make
 

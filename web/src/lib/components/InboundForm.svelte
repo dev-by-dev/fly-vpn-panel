@@ -15,9 +15,10 @@
   const xh0 = cfg0.streamSettings?.xhttpSettings ?? {};
 
   let tag = $state(inbound?.tag ?? '');
-  let port = $state<number>(cfg0.port ?? 443);
+  // Дефолты по спеке: 8443 и stream-up (443/auto ломали свежий inbound).
+  let port = $state<number>(cfg0.port ?? 8443);
   let path = $state<string>(xh0.path ?? '/xhttp');
-  let mode = $state<string>(xh0.mode ?? 'auto');
+  let mode = $state<string>(xh0.mode ?? 'stream-up');
   let dest = $state<string>(rs0.dest ?? 'www.microsoft.com:443');
   let serverNames = $state<string>((rs0.serverNames ?? []).join(','));
   let shortIds = $state<string>((rs0.shortIds ?? []).join(','));

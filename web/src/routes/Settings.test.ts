@@ -14,11 +14,15 @@ const enroll = {
   backup_codes: Array.from({ length: 10 }, (_, i) => `CODE-${i}`),
 };
 
+let totpEnabled = false;
+
 function mockFetch() {
   return vi.fn((input: string | URL, init?: RequestInit) => {
     const url = String(input);
     if (url === '/api/settings' && (!init || init.method === undefined || init.method === 'GET')) {
-      return Promise.resolve(new Response(JSON.stringify({ poll_interval_sec: 30 }), { status: 200 }));
+      return Promise.resolve(
+        new Response(JSON.stringify({ poll_interval_sec: 30, totp_enabled: totpEnabled }), { status: 200 })
+      );
     }
     if (url === '/api/auth/2fa/enroll') {
       return Promise.resolve(new Response(JSON.stringify(enroll), { status: 200 }));
@@ -33,6 +37,7 @@ function mockFetch() {
 let fetchMock: ReturnType<typeof mockFetch>;
 
 beforeEach(() => {
+  totpEnabled = false;
   fetchMock = mockFetch();
   vi.stubGlobal('fetch', fetchMock);
 });
@@ -76,4 +81,13 @@ test('verify: код отправляется на /api/auth/2fa/verify → вк
     expect(JSON.parse(String(call![1]!.body))).toEqual({ code: '123456' });
   });
   expect(await screen.findByText('2FA включена')).toBeTruthy();
+});
+
+test('состояние 2FA с сервера: totp_enabled=true → «2FA включена» без enroll', async () => {
+  totpEnabled = true;
+  render(Settings);
+
+  expect(await screen.findByText('2FA включена')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Подключить 2FA' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Отключить' })).toBeTruthy();
 });

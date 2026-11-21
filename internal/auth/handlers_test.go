@@ -54,6 +54,24 @@ func postJSON(t *testing.T, h http.HandlerFunc, body any) *httptest.ResponseReco
 	return rr
 }
 
+// postJSONXFF is postJSON with an explicit RemoteAddr and optional
+// X-Forwarded-For header (reverse-proxy scenarios).
+func postJSONXFF(t *testing.T, h http.HandlerFunc, body any, remoteAddr, xff string) *httptest.ResponseRecorder {
+	t.Helper()
+	b, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(b))
+	req.RemoteAddr = remoteAddr
+	if xff != "" {
+		req.Header.Set("X-Forwarded-For", xff)
+	}
+	rr := httptest.NewRecorder()
+	h(rr, req)
+	return rr
+}
+
 func bodyError(t *testing.T, rr *httptest.ResponseRecorder) string {
 	t.Helper()
 	var m map[string]any
@@ -256,6 +274,68 @@ func TestLoginRateLimit(t *testing.T) {
 	})
 	if rr.Code != http.StatusTooManyRequests {
 		t.Fatalf("6th request status = %d, want 429", rr.Code)
+	}
+}
+
+// TestLoginRateLimitXFF: behind the reverse proxy every client shares
+// RemoteAddr 127.0.0.1; the limiter must key on the first
+// X-Forwarded-For IP (loopback only) so clients get independent
+// budgets instead of one shared global 5/min limit.
+func TestLoginRateLimitXFF(t *testing.T) {
+	h := newTestEnv(t)
+	createAdmin(t, h.Store, "a-sufficiently-long-password")
+	const loopback = "127.0.0.1:5555"
+	creds := func() map[string]string {
+		return map[string]string{"username": "admin", "password": "wrong-password-xxx"}
+	}
+
+	for i := 0; i < 5; i++ {
+		rr := postJSONXFF(t, h.Login, creds(), loopback, "203.0.113.20")
+		if rr.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt #%d status = %d, want 401", i+1, rr.Code)
+		}
+	}
+	// Same X-FF: that client's budget is exhausted.
+	if rr := postJSONXFF(t, h.Login, creds(), loopback, "203.0.113.20"); rr.Code != http.StatusTooManyRequests {
+		t.Fatalf("6th same-XFF status = %d, want 429", rr.Code)
+	}
+	// A different X-FF client has an independent budget: 401, not 429.
+	if rr := postJSONXFF(t, h.Login, creds(), loopback, "198.51.100.30"); rr.Code != http.StatusUnauthorized {
+		t.Fatalf("different XFF status = %d, want 401 (independent rate limit)", rr.Code)
+	}
+	// Off-loopback RemoteAddr must ignore XFF entirely: this fresh
+	// client reuses the exhausted XFF value and must not be 429'd by it.
+	if rr := postJSONXFF(t, h.Login, creds(), "203.0.113.99:6666", "203.0.113.20"); rr.Code != http.StatusUnauthorized {
+		t.Fatalf("direct client status = %d, want 401 (XFF ignored off-loopback)", rr.Code)
+	}
+}
+
+// TestEnroll2FAAlreadyEnabled: re-running enroll while 2FA is on calls
+// AdminSetTOTP(secret,false) and would silently disable 2FA without a
+// code; it must 409 and require disable-with-code first.
+func TestEnroll2FAAlreadyEnabled(t *testing.T) {
+	h := newTestEnv(t)
+	createAdmin(t, h.Store, "a-sufficiently-long-password")
+	secret, _, err := EnrollTOTP("admin")
+	if err != nil {
+		t.Fatalf("EnrollTOTP(): %v", err)
+	}
+	if err := h.Store.AdminSetTOTP(secret, true); err != nil {
+		t.Fatalf("AdminSetTOTP(): %v", err)
+	}
+
+	rr := postJSON(t, h.Enroll2FA, map[string]string{})
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("enroll-while-enabled status = %d (%s), want 409", rr.Code, rr.Body.String())
+	}
+	// 2FA must still be enabled and the secret untouched afterwards.
+	admin, err := h.Store.AdminGet()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !admin.TOTPEnabled || admin.TOTPSecret != secret {
+		t.Fatalf("admin after rejected enroll: enabled=%v secret=%q, want untouched",
+			admin.TOTPEnabled, admin.TOTPSecret)
 	}
 }
 

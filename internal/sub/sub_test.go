@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"flypanel/internal/store"
+	"flypanel/internal/users"
 )
 
 // All fixtures are TEST-NET (203.0.113.x), example.com domains and
@@ -408,6 +409,67 @@ func TestSubAccess(t *testing.T) {
 	res = do(t, mux, "GET", "/sub/activetoken1/xml", "", "")
 	if res.StatusCode != 400 {
 		t.Errorf("bad format suffix: status = %d, want 400", res.StatusCode)
+	}
+}
+
+// TestSubManualDisabledPastExpiry: a manually disabled user whose expiry
+// has passed must keep disabled_reason "manual" — re-tagging to
+// "expired" would let the poller auto-enable them once the expiry is
+// extended (Decide enables only expired-tagged users).
+func TestSubManualDisabledPastExpiry(t *testing.T) {
+	st, mux := newTestServer(t)
+
+	u := &store.User{
+		Username: "manualuser", UUID: testUUID, SubToken: "manualtoken1",
+		Expiry: time.Now().Add(-time.Hour).UTC(), Disabled: true, DisabledReason: "manual",
+		CreatedAt: time.Now().UTC(),
+	}
+	if err := st.UserCreate(u); err != nil {
+		t.Fatal(err)
+	}
+
+	res := do(t, mux, "GET", "/sub/manualtoken1", "", "")
+	if res.StatusCode != http.StatusForbidden {
+		t.Fatalf("manual-disabled past-expiry: status = %d, want 403", res.StatusCode)
+	}
+	body, _ := io.ReadAll(res.Body)
+	if !strings.Contains(string(body), `"error":"disabled"`) {
+		t.Errorf("body = %q, want disabled", body)
+	}
+	after, err := st.UserGet(u.ID)
+	if err != nil || after.DisabledReason != "manual" {
+		t.Fatalf("reason after fetch = %q (err %v), want manual untouched", after.DisabledReason, err)
+	}
+
+	// Extending the expiry must not resurrect the user: the row stays
+	// disabled and Decide never emits enable for a manual disable.
+	after.Expiry = time.Now().Add(24 * time.Hour).UTC()
+	if err := st.UserUpdate(after); err != nil {
+		t.Fatal(err)
+	}
+	fresh, err := st.UserGet(u.ID)
+	if err != nil || !fresh.Disabled {
+		t.Fatalf("user after expiry extension: disabled=%v (err %v), want still disabled", fresh.Disabled, err)
+	}
+	for _, a := range users.Decide(*fresh, 0, nil, time.Now().UTC()) {
+		if a.Type == "enable" {
+			t.Fatalf("Decide emits enable for a manual disable: %+v", a)
+		}
+	}
+}
+
+// TestRenderJSONSinglePass: substitution must be a single pass. A value
+// containing another placeholder ({{TAG}} inside the path) must never be
+// re-substituted with that key's value — it surfaces as an unresolved
+// placeholder instead. Map iteration made this order-dependent, so every
+// attempt must behave identically.
+func TestRenderJSONSinglePass(t *testing.T) {
+	in := testInbound("in-a", 8443, "pbk_a", "sid_a", "a.example.com", "/x-{{TAG}}", "auto", "")
+	for i := 0; i < 20; i++ {
+		_, err := RenderJSON([]store.Inbound{in}, testUser(), testEntryIP, DefaultTemplate("json"))
+		if err == nil {
+			t.Fatalf("attempt %d: placeholder inside a value was re-substituted (multi-pass)", i)
+		}
 	}
 }
 

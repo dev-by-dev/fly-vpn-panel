@@ -15,7 +15,9 @@ bin/
 /flypanel
 web/dist/*
 !web/dist/index.html
-dist/
+# /dist/ привязан к корню: без якоря web/dist/ игнорился бы целиком
+# и ре-включение !web/dist/index.html выше не работало.
+/dist/
 coverage/
 
 # Зависимости

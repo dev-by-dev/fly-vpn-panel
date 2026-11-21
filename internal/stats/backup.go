@@ -41,9 +41,9 @@ func RunBackup(ctx context.Context, st *store.Store, dataDir string) {
 }
 
 // backupOnce writes a VACUUM INTO snapshot for today and prunes old
-// copies down to backupsKeep. A same-day restart is a no-op: VACUUM
-// INTO refuses to overwrite an existing file, which is logged and
-// skipped — fine at a daily cadence.
+// copies down to backupsKeep. A same-day restart is a silent no-op:
+// today's file already exists, so there is nothing to write and
+// nothing to prune.
 func backupOnce(ctx context.Context, st *store.Store, dataDir string) {
 	if ctx.Err() != nil {
 		return
@@ -54,6 +54,9 @@ func backupOnce(ctx context.Context, st *store.Store, dataDir string) {
 		return
 	}
 	path := filepath.Join(dir, "panel-"+time.Now().UTC().Format("20060102")+".db")
+	if _, err := os.Stat(path); err == nil {
+		return // same-day restart: today's snapshot already exists
+	}
 	if _, err := st.DB().Exec(fmt.Sprintf("VACUUM INTO '%s'", path)); err != nil {
 		log.Printf("stats: backup %s: %v", path, err)
 		return

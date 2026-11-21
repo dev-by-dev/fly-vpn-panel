@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"testing"
@@ -55,5 +56,31 @@ func TestBackupCreatesAndPrunes(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(bdir, name)); !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("%s not pruned (err=%v)", name, err)
 		}
+	}
+}
+
+// TestBackupSameDayRestartSkips: a same-day restart must silently keep
+// today's snapshot (VACUUM INTO refuses to overwrite an existing file),
+// not log a scary error.
+func TestBackupSameDayRestartSkips(t *testing.T) {
+	dataDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { st.Close() })
+
+	backupOnce(context.Background(), st, dataDir)
+	today := "panel-" + time.Now().UTC().Format("20060102") + ".db"
+	if _, err := os.Stat(filepath.Join(dataDir, "backups", today)); err != nil {
+		t.Fatalf("first backup missing: %v", err)
+	}
+
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	backupOnce(context.Background(), st, dataDir)
+	if s := buf.String(); s != "" {
+		t.Fatalf("same-day restart logged %q, want a silent skip", s)
 	}
 }

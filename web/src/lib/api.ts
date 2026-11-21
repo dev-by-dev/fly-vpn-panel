@@ -61,8 +61,10 @@ export function loginRequest(
   password: string,
   totp?: string
 ): Promise<Response> {
+  // Backend Login decodes json:"code" — the totp/backup value must be
+  // sent under `code` or 2FA login always fails.
   const body: Record<string, string> = totp
-    ? { username, password, totp }
+    ? { username, password, code: totp }
     : { username, password };
   return fetch('/api/auth/login', {
     method: 'POST',

@@ -263,6 +263,110 @@ func TestKeysRegen(t *testing.T) {
 	}
 }
 
+// TestPutNullRouting422: "null" is syntactically valid JSON but not a
+// routing object; the PUT must reject it with 422 BEFORE SettingSet, so
+// the old value survives and Apply never panics (a panic would skip the
+// rollback and brick the panel on every later apply).
+func TestPutNullRouting422(t *testing.T) {
+	env := newTestEnv(t, okValidate)
+	old := `{"domainStrategy":"AsIs","rules":[]}`
+	if rec := doJSON(t, env.srv, "PUT", "/api/config/routing", old); rec.Code != http.StatusOK {
+		t.Fatalf("seed routing: status %d, body %s", rec.Code, rec.Body.String())
+	}
+
+	rec := doJSON(t, env.srv, "PUT", "/api/config/routing", "null")
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("put null routing: status %d, want 422, body %s", rec.Code, rec.Body.String())
+	}
+	if errCode(t, rec) != "invalid_routing" {
+		t.Fatalf("error = %q, want invalid_routing", errCode(t, rec))
+	}
+	// The stored routing must be untouched (no SettingSet, no rollback).
+	rec = doJSON(t, env.srv, "GET", "/api/config/routing", "")
+	if rec.Body.String() != old {
+		t.Fatalf("routing after null put = %s, want %s", rec.Body.String(), old)
+	}
+
+	// Any other non-object value gets the same treatment.
+	rec = doJSON(t, env.srv, "PUT", "/api/config/routing", `[]`)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("put array routing: status %d, want 422, body %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestCreateRealityNoKeysAutogen: a freshly created Reality inbound
+// without keys would be rejected by `xray run -test` (apply → 502 on
+// every UI create); Create must generate the pair before storing.
+func TestCreateRealityNoKeysAutogen(t *testing.T) {
+	env := newTestEnv(t, okValidate)
+
+	body := `{"tag":"in-reality","enabled":true,"config":{"port":8443,"protocol":"vless","settings":{},` +
+		`"streamSettings":{"security":"reality","realitySettings":{"dest":"www.microsoft.com:443",` +
+		`"serverNames":["www.microsoft.com"],"shortIds":[""]}}}}`
+	rec := doJSON(t, env.srv, "POST", "/api/inbounds", body)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: status %d, body %s", rec.Code, rec.Body.String())
+	}
+	in := decodeInbound(t, rec)
+	var cfg map[string]any
+	if err := json.Unmarshal(in.Config, &cfg); err != nil {
+		t.Fatalf("decode created config: %v", err)
+	}
+	rs := realitySettings(cfg)
+	if rs == nil {
+		t.Fatal("realitySettings missing in created config")
+	}
+	priv, _ := rs["privateKey"].(string)
+	pub, _ := rs["publicKey"].(string)
+	if len(priv) != 43 || len(pub) != 43 {
+		t.Fatalf("auto-generated keys = %q/%q, want a 43-char X25519 pair", priv, pub)
+	}
+	if priv == pub {
+		t.Fatal("private and public key must differ")
+	}
+	db, err := env.st.InboundGet(in.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(db.ConfigJSON, priv) {
+		t.Fatalf("generated key not persisted: %s", db.ConfigJSON)
+	}
+	// The create applied: xray (fake) started exactly once.
+	waitStarts(t, env.counter, 1, 2*time.Second)
+}
+
+// TestPatchTagRenormalizesConfig: a tag-only patch must re-normalize
+// the stored config under the new tag so store tag == config tag
+// (membership sync depends on it).
+func TestPatchTagRenormalizesConfig(t *testing.T) {
+	env := newTestEnv(t, okValidate)
+	rec := doJSON(t, env.srv, "POST", "/api/inbounds",
+		`{"tag":"in-old","enabled":true,"config":{"port":443,"protocol":"vless","settings":{}}}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: status %d, body %s", rec.Code, rec.Body.String())
+	}
+	in := decodeInbound(t, rec)
+
+	rec = doJSON(t, env.srv, "PATCH", "/api/inbounds/"+strconv.FormatInt(in.ID, 10), `{"tag":"in-new"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("patch tag: status %d, body %s", rec.Code, rec.Body.String())
+	}
+	patched := decodeInbound(t, rec)
+	if patched.Tag != "in-new" {
+		t.Fatalf("tag = %q, want in-new", patched.Tag)
+	}
+	if tag, _ := configField(t, patched, "tag").(string); tag != "in-new" {
+		t.Fatalf("config tag = %q, want in-new (must follow the store tag)", tag)
+	}
+	db, err := env.st.InboundGet(in.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(db.ConfigJSON, `"tag":"in-new"`) {
+		t.Fatalf("db config tag not renormalized: %s", db.ConfigJSON)
+	}
+}
+
 func TestInboundApplyFailure502(t *testing.T) {
 	env := newTestEnv(t, failValidate)
 
