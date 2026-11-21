@@ -26,3 +26,6 @@ node_modules/
 # ОС / редакторы / бэкапы файлов
 .DS_Store
 *.bak-*
+
+# Playwright MCP артефакты
+.playwright-mcp/

@@ -30,7 +30,9 @@
 
   // структурные поля пишутся в JSON; ручное редактирование textarea имеет приоритет
   function build(): Record<string, any> {
-    const cfg = structuredClone(cfg0);
+    // $state.snapshot: cfg0 may be a Svelte 5 proxy (row from $state array);
+    // structuredClone throws DataCloneError on proxies.
+    const cfg = $state.snapshot(cfg0) as Record<string, any>;
     cfg.port = port;
     const ss = (cfg.streamSettings ??= {});
     ss.network = 'xhttp';
