@@ -66,6 +66,7 @@ func NewRouter(d Deps) http.Handler {
 	apiH := &Handlers{
 		Store: d.Store, Mgr: d.Manager, Poller: d.Poller,
 		PanelDomain: d.Cfg.PanelDomain, interval: interval,
+		Client:  d.Client,
 		DataDir: d.Cfg.DataDir,
 	}
 
@@ -98,6 +99,7 @@ func NewRouter(d Deps) http.Handler {
 	// fall through to the JSON 404 below.
 	if mgr, ok := d.Manager.(*xray.Manager); ok {
 		ib := &inbounds.Handlers{Store: d.Store, Applier: inbounds.NewApplier(d.Store, d.Cfg, mgr)}
+		p.HandleFunc("GET /api/inbounds/metrics", apiH.InboundMetrics)
 		p.HandleFunc("GET /api/inbounds", ib.List)
 		p.HandleFunc("POST /api/inbounds", ib.Create)
 		p.HandleFunc("GET /api/inbounds/{id}", ib.Get)

@@ -17,6 +17,7 @@ import (
 	"flypanel/internal/store"
 	"flypanel/internal/sub"
 	"flypanel/internal/xray"
+	"flypanel/internal/xrayclient"
 )
 
 // Settings keys owned by the API layer.
@@ -33,6 +34,7 @@ const (
 // package of their own.
 type Handlers struct {
 	Store       *store.Store
+	Client      *xrayclient.Client
 	Mgr         Manager
 	Poller      *stats.Poller
 	PanelDomain string
@@ -186,6 +188,22 @@ func (h *Handlers) StatsLive(w http.ResponseWriter, r *http.Request) {
 		"interval_sec": int(h.currentInterval().Seconds()),
 		"buckets":      buckets,
 	})
+}
+
+// InboundMetrics serves GET /api/inbounds/metrics: cumulative per-inbound
+// traffic from xray counters plus the current online user count.
+func (h *Handlers) InboundMetrics(w http.ResponseWriter, r *http.Request) {
+	list, err := h.Client.InboundTraffic()
+	if err != nil {
+		jsonError(w, http.StatusBadGateway, "xray_unavailable")
+		return
+	}
+	_, _, online, err := stats.Summary(h.Store, h.currentInterval())
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "internal")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"inbounds": list, "online_count": online})
 }
 
 // StatsOnline serves GET /api/stats/online: devices seen within the

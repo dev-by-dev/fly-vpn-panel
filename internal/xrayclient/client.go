@@ -73,6 +73,53 @@ func (c *Client) QueryUserStats(email string) (up, down int64, err error) {
 	return up, down, nil
 }
 
+// InboundTraffic is cumulative uplink/downlink bytes for one inbound.
+type InboundTraffic struct {
+	Tag  string
+	Up   int64
+	Down int64
+}
+
+// InboundTraffic reads xray's inbound>>>{tag}>>>traffic>>>uplink|downlink
+// counters. An inbound that carried no traffic has no counter and
+// reports zero.
+func (c *Client) InboundTraffic() ([]InboundTraffic, error) {
+	ctx, cancel := ctx()
+	defer cancel()
+	resp, err := c.stats.QueryStats(ctx, &statscmd.QueryStatsRequest{Reset_: false})
+	if err != nil {
+		return nil, err
+	}
+	byTag := make(map[string]*InboundTraffic)
+	for _, st := range resp.Stat {
+		rest, ok := strings.CutPrefix(st.Name, "inbound>>>")
+		if !ok {
+			continue
+		}
+		tag, dir, ok := strings.Cut(rest, ">>>traffic>>>")
+		if !ok {
+			continue
+		}
+		it := byTag[tag]
+		if it == nil {
+			it = &InboundTraffic{Tag: tag}
+			byTag[tag] = it
+		}
+		switch dir {
+		case "uplink":
+			it.Up = st.Value
+		case "downlink":
+			it.Down = st.Value
+		}
+	}
+	out := make([]InboundTraffic, 0, len(byTag))
+	for _, it := range byTag {
+		out = append(out, *it)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Tag < out[j].Tag })
+	return out, nil
+}
+
 func (c *Client) queryCounter(name string) (int64, error) {
 	ctx, cancel := ctx()
 	defer cancel()
