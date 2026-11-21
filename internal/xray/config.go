@@ -54,6 +54,9 @@ func GenerateConfig(inbounds []store.Inbound, activeUsers []store.User, routingJ
 			ib["settings"] = settings
 		}
 		settings["clients"] = clients
+		// Store tag is the source of truth: membership sync addresses
+		// inbounds by tag, and a config without one breaks it.
+		ib["tag"] = in.Tag
 		// xray 26.x rejects vless inbounds without decryption:"none".
 		if ib["protocol"] == "vless" {
 			if _, ok := settings["decryption"]; !ok {
