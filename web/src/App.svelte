@@ -55,7 +55,7 @@
     <header class="border-b bg-card">
       <div class="flex items-center gap-4 px-4">
         <div class="shrink-0 py-4 text-lg font-semibold">flypanel</div>
-        <nav class="flex flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden">
+        <nav class="flex flex-1 items-center gap-1">
           {#each nav as item (item.href)}
             {#if item.path === '/inbounds'}
               <div class="relative shrink-0">
