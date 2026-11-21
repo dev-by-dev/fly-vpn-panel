@@ -8,7 +8,13 @@
   // xray Status has no json tags → Go field names capitalized; Uptime = ns.
   type XrayStatus = { Running: boolean; PID: number; Uptime: number; Restarts: number; Version: string };
   type Summary = { total_up: number; total_down: number; online_count: number };
-  type Device = { Username: string; IP: string; FirstSeen: string; LastSeen: string };
+  type PanelUser = {
+    username: string;
+    expiry: string;
+    quota_bytes: number;
+    used_bytes: number;
+    disabled: boolean;
+  };
   type SystemStats = {
     cpu_used_percent: number;
     cpu_cores: number;
@@ -21,8 +27,7 @@
 
   let range = $state<'day' | 'week' | 'month'>('day');
   let user = $state('');
-  let users = $state<{ username: string }[]>([]);
-  let devices = $state<Device[]>([]);
+  let users = $state<PanelUser[]>([]);
   let buckets = $state<Bucket[]>([]);
   // Режим реального времени: сырые сэмплы поллера (байты за интервал), опрос каждые 5 с.
   let live = $state(false);
@@ -34,9 +39,17 @@
   let error = $state('');
   let busy = $state('');
 
-  function fmtDate(iso: string): string {
-    return new Date(iso).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'medium' });
-  }
+  // Счётчики для карточек «Пользователи»: статусы взаимоисключающие, сумма = всего.
+  const userStats = $derived.by(() => {
+    const now = Date.now();
+    let expired = 0, limited = 0, disabled = 0;
+    for (const u of users) {
+      if (Date.parse(u.expiry) <= now) expired++;
+      else if (u.quota_bytes > 0 && u.used_bytes >= u.quota_bytes) limited++;
+      else if (u.disabled) disabled++;
+    }
+    return { total: users.length, expired, limited, disabled, active: users.length - expired - limited - disabled };
+  });
 
   async function loadTraffic() {
     try {
@@ -83,17 +96,15 @@
 
   async function loadRest() {
     try {
-      const [dev, st, sum, us, sy] = await Promise.all([
-        apiFetch('/api/stats/online'),
+      const [st, sum, us, sy] = await Promise.all([
         apiFetch('/api/xray/status'),
         apiFetch('/api/stats/summary'),
         apiFetch('/api/users'),
         apiFetch('/api/system'),
       ]);
-      if (dev.ok) devices = (await dev.json()) as Device[];
       if (st.ok) xray = (await st.json()) as XrayStatus;
       if (sum.ok) summary = (await sum.json()) as Summary;
-      if (us.ok) users = ((await us.json()) as { username: string }[]).slice(0, 100);
+      if (us.ok) users = (await us.json()) as PanelUser[];
       if (sy.ok) sys = (await sy.json()) as SystemStats;
       error = '';
     } catch {
@@ -220,34 +231,37 @@
 </div>
 
 <!-- Summary totals -->
-<!-- Online devices -->
-<h2 class="mt-6 font-medium">Онлайн-устройства</h2>
+<!-- User stats -->
+<h2 class="mt-6 font-medium">Пользователи</h2>
 <div class="mt-3 flex flex-wrap gap-2">
-  {#each devices as d (d.Username + d.IP)}
-    <div class="flex items-center gap-3 rounded-lg border bg-card px-3 py-2">
-      <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          class="h-5 w-5"
-        >
-          <rect x="7" y="2" width="10" height="20" rx="2" />
-          <path d="M11 18h2" />
+  {#each [
+    { label: 'Всего', value: userStats.total, box: 'bg-sky-500/10 text-sky-400', icon: 'users' },
+    { label: 'Active', value: userStats.active, box: 'bg-emerald-500/10 text-emerald-400', icon: 'pulse' },
+    { label: 'Expired', value: userStats.expired, box: 'bg-red-500/10 text-red-400', icon: 'clock' },
+    { label: 'Limited', value: userStats.limited, box: 'bg-amber-500/10 text-amber-400', icon: 'hourglass' },
+    { label: 'Disabled', value: userStats.disabled, box: 'bg-slate-500/10 text-slate-400', icon: 'ban' },
+  ] as c (c.label)}
+    <div class="flex min-w-40 items-center gap-3 rounded-xl border bg-card px-3 py-2">
+      <span class="grid h-10 w-10 shrink-0 place-items-center rounded-lg {c.box}">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+          {#if c.icon === 'users'}
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          {:else if c.icon === 'pulse'}
+            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+          {:else if c.icon === 'clock'}
+            <circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" />
+          {:else if c.icon === 'hourglass'}
+            <path d="M5 22h14" /><path d="M5 2h14" /><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22" /><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2" />
+          {:else}
+            <circle cx="12" cy="12" r="10" /><path d="m4.9 4.9 14.2 14.2" />
+          {/if}
         </svg>
       </span>
       <div class="min-w-0">
-        <div class="font-mono text-xs text-muted-foreground">{d.IP}</div>
-        <div class="text-lg font-semibold leading-none">{d.Username}</div>
-        <div class="mt-1 text-xs text-muted-foreground">{fmtDate(d.LastSeen)}</div>
+        <div class="text-sm text-muted-foreground">{c.label}</div>
+        <div class="text-2xl font-semibold leading-none">{c.value}</div>
       </div>
     </div>
-  {:else}
-    <p class="text-sm text-muted-foreground">Никого нет</p>
   {/each}
 </div>
 
