@@ -1,6 +1,8 @@
 package store
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -20,16 +22,38 @@ type DeviceMeta struct {
 // so first_seen is immutable.
 func (s *Store) DeviceUpsert(username, ip string, meta DeviceMeta, now time.Time) error {
 	ts := fmtTime(now)
-	_, err := s.DB().Exec(`
+	// Ключ устройства — HWID клиента; без него падаем на IP.
+	var id int64
+	var err error
+	if meta.HWID != "" {
+		err = s.DB().QueryRow(`SELECT id FROM devices WHERE username = ? AND hwid = ?`, username, meta.HWID).Scan(&id)
+	} else {
+		err = s.DB().QueryRow(`SELECT id FROM devices WHERE username = ? AND ip = ? AND hwid = ''`, username, ip).Scan(&id)
+	}
+	switch {
+	case err == nil:
+		_, err = s.DB().Exec(`
+			UPDATE devices SET ip = ?, last_seen = ?,
+				platform = CASE WHEN ? <> '' THEN ? ELSE platform END,
+				os_version = CASE WHEN ? <> '' THEN ? ELSE os_version END,
+				model = CASE WHEN ? <> '' THEN ? ELSE model END,
+				user_agent = CASE WHEN ? <> '' THEN ? ELSE user_agent END
+			WHERE id = ?`,
+			ip, ts,
+			meta.Platform, meta.Platform,
+			meta.OSVersion, meta.OSVersion,
+			meta.Model, meta.Model,
+			meta.UserAgent, meta.UserAgent, id)
+		if err != nil {
+			return fmt.Errorf("device upsert: %w", err)
+		}
+		return nil
+	case !errors.Is(err, sql.ErrNoRows):
+		return fmt.Errorf("device upsert: %w", err)
+	}
+	_, err = s.DB().Exec(`
 		INSERT INTO devices (username, ip, first_seen, last_seen, hwid, platform, os_version, model, user_agent)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(username, ip) DO UPDATE SET
-			last_seen = excluded.last_seen,
-			hwid = CASE WHEN excluded.hwid <> '' THEN excluded.hwid ELSE devices.hwid END,
-			platform = CASE WHEN excluded.platform <> '' THEN excluded.platform ELSE devices.platform END,
-			os_version = CASE WHEN excluded.os_version <> '' THEN excluded.os_version ELSE devices.os_version END,
-			model = CASE WHEN excluded.model <> '' THEN excluded.model ELSE devices.model END,
-			user_agent = CASE WHEN excluded.user_agent <> '' THEN excluded.user_agent ELSE devices.user_agent END`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		username, ip, ts, ts, meta.HWID, meta.Platform, meta.OSVersion, meta.Model, meta.UserAgent)
 	if err != nil {
 		return fmt.Errorf("device upsert: %w", err)

@@ -56,6 +56,7 @@ func (h *Handlers) recordDevice(r *http.Request, username string) {
 		}
 	}
 	meta := store.DeviceMeta{
+		HWID:      clipHeader(r.Header.Get("X-HWID")),
 		Platform:  clipHeader(r.Header.Get("X-Device-OS")),
 		OSVersion: clipHeader(r.Header.Get("X-Ver-OS")),
 		Model:     clipHeader(r.Header.Get("X-Device-Model")),
