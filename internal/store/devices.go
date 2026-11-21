@@ -22,28 +22,40 @@ type DeviceMeta struct {
 // so first_seen is immutable.
 func (s *Store) DeviceUpsert(username, ip string, meta DeviceMeta, now time.Time) error {
 	ts := fmtTime(now)
-	// Ключ устройства — HWID клиента; без него падаем на IP.
-	var id int64
-	var err error
-	if meta.HWID != "" {
-		err = s.DB().QueryRow(`SELECT id FROM devices WHERE username = ? AND hwid = ?`, username, meta.HWID).Scan(&id)
-	} else {
-		err = s.DB().QueryRow(`SELECT id FROM devices WHERE username = ? AND ip = ? AND hwid = ''`, username, ip).Scan(&id)
+	// xray знает только IP: обновляем last_seen у всех устройств этого IP,
+	// включая строки с HWID, иначе они «стареют» и висят оффлайн.
+	if meta.HWID == "" {
+		res, err := s.DB().Exec(`UPDATE devices SET last_seen = ? WHERE username = ? AND ip = ?`, ts, username, ip)
+		if err != nil {
+			return fmt.Errorf("device upsert: %w", err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("device upsert: rows affected: %w", err)
+		}
+		if n > 0 {
+			return nil
+		}
+		_, err = s.DB().Exec(`INSERT INTO devices (username, ip, first_seen, last_seen) VALUES (?, ?, ?, ?)`,
+			username, ip, ts, ts)
+		if err != nil {
+			return fmt.Errorf("device upsert: %w", err)
+		}
+		return nil
 	}
+	// Клиент прислал HWID — ключ устройства именно он.
+	var id int64
+	err := s.DB().QueryRow(`SELECT id FROM devices WHERE username = ? AND hwid = ?`, username, meta.HWID).Scan(&id)
 	switch {
 	case err == nil:
-		_, err = s.DB().Exec(`
-			UPDATE devices SET ip = ?, last_seen = ?,
-				platform = CASE WHEN ? <> '' THEN ? ELSE platform END,
-				os_version = CASE WHEN ? <> '' THEN ? ELSE os_version END,
-				model = CASE WHEN ? <> '' THEN ? ELSE model END,
-				user_agent = CASE WHEN ? <> '' THEN ? ELSE user_agent END
-			WHERE id = ?`,
-			ip, ts,
-			meta.Platform, meta.Platform,
-			meta.OSVersion, meta.OSVersion,
-			meta.Model, meta.Model,
-			meta.UserAgent, meta.UserAgent, id)
+		_, err = s.DB().Exec(`UPDATE devices SET ip = ?, last_seen = ?,
+			platform = CASE WHEN ? <> '' THEN ? ELSE platform END,
+			os_version = CASE WHEN ? <> '' THEN ? ELSE os_version END,
+			model = CASE WHEN ? <> '' THEN ? ELSE model END,
+			user_agent = CASE WHEN ? <> '' THEN ? ELSE user_agent END
+			WHERE id = ?`, ip, ts,
+			meta.Platform, meta.Platform, meta.OSVersion, meta.OSVersion,
+			meta.Model, meta.Model, meta.UserAgent, meta.UserAgent, id)
 		if err != nil {
 			return fmt.Errorf("device upsert: %w", err)
 		}
@@ -51,8 +63,7 @@ func (s *Store) DeviceUpsert(username, ip string, meta DeviceMeta, now time.Time
 	case !errors.Is(err, sql.ErrNoRows):
 		return fmt.Errorf("device upsert: %w", err)
 	}
-	_, err = s.DB().Exec(`
-		INSERT INTO devices (username, ip, first_seen, last_seen, hwid, platform, os_version, model, user_agent)
+	_, err = s.DB().Exec(`INSERT INTO devices (username, ip, first_seen, last_seen, hwid, platform, os_version, model, user_agent)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		username, ip, ts, ts, meta.HWID, meta.Platform, meta.OSVersion, meta.Model, meta.UserAgent)
 	if err != nil {
