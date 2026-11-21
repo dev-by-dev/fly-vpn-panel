@@ -151,18 +151,24 @@
 
 <!-- Summary totals -->
 <h2 class="mt-6 font-medium">Трафик панели</h2>
-<div class="mt-3 grid gap-4 sm:grid-cols-3">
-  <div class="rounded-xl border bg-card p-4">
-    <div class="text-xs text-muted-foreground">Отдано всего</div>
-    <div class="mt-1 text-xl font-semibold">{summary ? fmtBytes(summary.total_up) : '—'}</div>
+<div class="mt-3 flex flex-wrap gap-2">
+  <div class="rounded-lg border bg-card px-3 py-2">
+    <div class="flex items-baseline gap-2">
+      <span class="text-xs text-muted-foreground">Отдано всего</span>
+      <span class="text-lg font-semibold leading-none">{summary ? fmtBytes(summary.total_up) : '—'}</span>
+    </div>
   </div>
-  <div class="rounded-xl border bg-card p-4">
-    <div class="text-xs text-muted-foreground">Принято всего</div>
-    <div class="mt-1 text-xl font-semibold">{summary ? fmtBytes(summary.total_down) : '—'}</div>
+  <div class="rounded-lg border bg-card px-3 py-2">
+    <div class="flex items-baseline gap-2">
+      <span class="text-xs text-muted-foreground">Принято всего</span>
+      <span class="text-lg font-semibold leading-none">{summary ? fmtBytes(summary.total_down) : '—'}</span>
+    </div>
   </div>
-  <div class="rounded-xl border bg-card p-4">
-    <div class="text-xs text-muted-foreground">Онлайн</div>
-    <div class="mt-1 text-xl font-semibold">{summary ? summary.online_count : '—'}</div>
+  <div class="rounded-lg border bg-card px-3 py-2">
+    <div class="flex items-baseline gap-2">
+      <span class="text-xs text-muted-foreground">Онлайн</span>
+      <span class="text-lg font-semibold leading-none">{summary ? summary.online_count : '—'}</span>
+    </div>
   </div>
 </div>
 
