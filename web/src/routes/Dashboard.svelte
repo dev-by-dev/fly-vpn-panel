@@ -98,11 +98,13 @@
 
 <!-- Host metrics -->
 <h2 class="mt-6 font-medium">Сервер</h2>
-<div class="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-  <div class="rounded-xl border bg-card p-4">
-    <div class="text-xs text-muted-foreground">ЦПУ занято</div>
-    <div class="mt-1 text-xl font-semibold">
-      {sys ? `${Math.round(sys.cpu_used_percent)}%` : '—'}
+<div class="mt-3 flex flex-wrap gap-2">
+  <div class="rounded-lg border bg-card px-3 py-2">
+    <div class="flex items-baseline gap-2">
+      <span class="text-xs text-muted-foreground">ЦПУ занято</span>
+      <span class="text-lg font-semibold leading-none">
+        {sys ? `${Math.round(sys.cpu_used_percent)}%` : '—'}
+      </span>
     </div>
     {#if sys}
       <div class="mt-1 text-xs text-muted-foreground">
@@ -110,10 +112,12 @@
       </div>
     {/if}
   </div>
-  <div class="rounded-xl border bg-card p-4">
-    <div class="text-xs text-muted-foreground">ОЗУ занято</div>
-    <div class="mt-1 text-xl font-semibold">
-      {sys && sys.mem_total > 0 ? fmtBytes(sys.mem_used) : '—'}
+  <div class="rounded-lg border bg-card px-3 py-2">
+    <div class="flex items-baseline gap-2">
+      <span class="text-xs text-muted-foreground">ОЗУ занято</span>
+      <span class="text-lg font-semibold leading-none">
+        {sys && sys.mem_total > 0 ? fmtBytes(sys.mem_used) : '—'}
+      </span>
     </div>
     {#if sys && sys.mem_total > 0}
       <div class="mt-1 text-xs text-muted-foreground">
@@ -121,17 +125,21 @@
       </div>
     {/if}
   </div>
-  <div class="rounded-xl border bg-card p-4">
-    <div class="text-xs text-muted-foreground">Свободно на диске</div>
-    <div class="mt-1 text-xl font-semibold">{sys ? fmtBytes(sys.disk_free) : '—'}</div>
+  <div class="rounded-lg border bg-card px-3 py-2">
+    <div class="flex items-baseline gap-2">
+      <span class="text-xs text-muted-foreground">Свободно на диске</span>
+      <span class="text-lg font-semibold leading-none">{sys ? fmtBytes(sys.disk_free) : '—'}</span>
+    </div>
     {#if sys}
       <div class="mt-1 text-xs text-muted-foreground">из {fmtBytes(sys.disk_total)}</div>
     {/if}
   </div>
-  <div class="rounded-xl border bg-card p-4">
-    <div class="text-xs text-muted-foreground">Потреблено трафика</div>
-    <div class="mt-1 text-xl font-semibold">
-      {summary ? fmtBytes(summary.total_up + summary.total_down) : '—'}
+  <div class="rounded-lg border bg-card px-3 py-2">
+    <div class="flex items-baseline gap-2">
+      <span class="text-xs text-muted-foreground">Потреблено трафика</span>
+      <span class="text-lg font-semibold leading-none">
+        {summary ? fmtBytes(summary.total_up + summary.total_down) : '—'}
+      </span>
     </div>
     {#if summary}
       <div class="mt-1 text-xs text-muted-foreground">
