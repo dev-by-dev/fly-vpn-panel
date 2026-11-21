@@ -148,83 +148,70 @@
 <!-- Host metrics -->
 <h2 class="mt-6 font-medium">Сервер</h2>
 <div class="mt-3 flex flex-wrap gap-2">
-  <div class="rounded-lg border bg-card px-3 py-2">
-    <div class="flex items-baseline gap-2">
-      <span class="text-xs text-muted-foreground">ЦПУ занято</span>
-      <span class="text-lg font-semibold leading-none">
-        {sys ? `${Math.round(sys.cpu_used_percent)}%` : '—'}
-      </span>
+  <div class="flex min-w-40 items-center gap-3 rounded-xl border bg-card px-3 py-2">
+    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-sky-500/10 text-sky-400">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5"><rect x="4" y="4" width="16" height="16" rx="2" /><rect x="9" y="9" width="6" height="6" /><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2" /></svg>
+    </span>
+    <div class="min-w-0">
+      <div class="text-xs text-muted-foreground">ЦПУ занято</div>
+      <div class="text-lg font-semibold leading-none">{sys ? `${Math.round(sys.cpu_used_percent)}%` : '—'}</div>
+      {#if sys}
+        <div class="mt-1 text-xs text-muted-foreground">{sys.cpu_cores} ядер · свободно {Math.round(100 - sys.cpu_used_percent)}%</div>
+      {/if}
     </div>
-    {#if sys}
-      <div class="mt-1 text-xs text-muted-foreground">
-        {sys.cpu_cores} ядер · свободно {Math.round(100 - sys.cpu_used_percent)}%
-      </div>
-    {/if}
   </div>
-  <div class="rounded-lg border bg-card px-3 py-2">
-    <div class="flex items-baseline gap-2">
-      <span class="text-xs text-muted-foreground">ОЗУ занято</span>
-      <span class="text-lg font-semibold leading-none">
-        {sys && sys.mem_total > 0 ? fmtBytes(sys.mem_used) : '—'}
-      </span>
+  <div class="flex min-w-40 items-center gap-3 rounded-xl border bg-card px-3 py-2">
+    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-violet-500/10 text-violet-400">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5"><path d="M6 19v-3M10 19v-3M14 19v-3M18 19v-3" /><rect x="2" y="6" width="20" height="10" rx="1" /></svg>
+    </span>
+    <div class="min-w-0">
+      <div class="text-xs text-muted-foreground">ОЗУ занято</div>
+      <div class="text-lg font-semibold leading-none">{sys && sys.mem_total > 0 ? fmtBytes(sys.mem_used) : '—'}</div>
+      {#if sys && sys.mem_total > 0}
+        <div class="mt-1 text-xs text-muted-foreground">из {fmtBytes(sys.mem_total)} · свободно {fmtBytes(sys.mem_free)}</div>
+      {/if}
     </div>
-    {#if sys && sys.mem_total > 0}
-      <div class="mt-1 text-xs text-muted-foreground">
-        из {fmtBytes(sys.mem_total)} · свободно {fmtBytes(sys.mem_free)}
-      </div>
-    {/if}
   </div>
-  <div class="rounded-lg border bg-card px-3 py-2">
-    <div class="flex items-baseline gap-2">
-      <span class="text-xs text-muted-foreground">Свободно на диске</span>
-      <span class="text-lg font-semibold leading-none">{sys ? fmtBytes(sys.disk_free) : '—'}</span>
+  <div class="flex min-w-40 items-center gap-3 rounded-xl border bg-card px-3 py-2">
+    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-amber-500/10 text-amber-400">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5"><line x1="22" x2="2" y1="12" y2="12" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /><line x1="6" x2="6.01" y1="16" y2="16" /><line x1="10" x2="10.01" y1="16" y2="16" /></svg>
+    </span>
+    <div class="min-w-0">
+      <div class="text-xs text-muted-foreground">Свободно на диске</div>
+      <div class="text-lg font-semibold leading-none">{sys ? fmtBytes(sys.disk_free) : '—'}</div>
+      {#if sys}
+        <div class="mt-1 text-xs text-muted-foreground">из {fmtBytes(sys.disk_total)}</div>
+      {/if}
     </div>
-    {#if sys}
-      <div class="mt-1 text-xs text-muted-foreground">из {fmtBytes(sys.disk_total)}</div>
-    {/if}
   </div>
-  <div class="rounded-lg border bg-card px-3 py-2">
-    <div class="flex items-baseline gap-2">
-      <span class="text-xs text-muted-foreground">Потреблено трафика</span>
-      <span class="text-lg font-semibold leading-none">
-        {summary ? fmtBytes(summary.total_up + summary.total_down) : '—'}
-      </span>
+  <div class="flex min-w-40 items-center gap-3 rounded-xl border bg-card px-3 py-2">
+    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-blue-500/10 text-blue-400">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5"><path d="m17 3 4 4-4 4" /><path d="M21 7H8a5 5 0 0 0-5 5" /><path d="m7 21-4-4 4-4" /><path d="M3 17h13a5 5 0 0 0 5-5" /></svg>
+    </span>
+    <div class="min-w-0">
+      <div class="text-xs text-muted-foreground">Потреблено трафика</div>
+      <div class="text-lg font-semibold leading-none">{summary ? fmtBytes(summary.total_up + summary.total_down) : '—'}</div>
+      {#if summary}
+        <div class="mt-1 text-xs text-muted-foreground">↑ {fmtBytes(summary.total_up)} · ↓ {fmtBytes(summary.total_down)}</div>
+      {/if}
     </div>
-    {#if summary}
-      <div class="mt-1 text-xs text-muted-foreground">
-        ↑ {fmtBytes(summary.total_up)} · ↓ {fmtBytes(summary.total_down)}
-      </div>
-    {/if}
   </div>
-  <div class="rounded-lg border bg-card px-3 py-2">
-    <div class="flex items-baseline gap-2">
-      <span class="text-xs text-muted-foreground">xray</span>
-      <span
-        class="text-lg font-semibold leading-none {xray?.Running
-          ? 'text-emerald-400'
-          : 'text-red-400'}"
-      >
+  <div class="flex min-w-40 items-center gap-3 rounded-xl border bg-card px-3 py-2">
+    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-lg {xray?.Running ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5"><rect x="2" y="2" width="20" height="8" rx="2" /><rect x="2" y="14" width="20" height="8" rx="2" /><line x1="6" x2="6.01" y1="6" y2="6" /><line x1="6" x2="6.01" y1="18" y2="18" /></svg>
+    </span>
+    <div class="min-w-0">
+      <div class="text-xs text-muted-foreground">xray</div>
+      <div class="text-lg font-semibold leading-none {xray?.Running ? 'text-emerald-400' : 'text-red-400'}">
         {xray ? (xray.Running ? 'Работает' : 'Остановлен') : '—'}
-      </span>
-    </div>
-    <div class="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-      <span>{xray?.Version || 'версия —'}</span>
-      <div class="flex gap-1">
-        <Button
-          size="xs"
-          variant="outline"
-          disabled={busy !== '' || !!xray?.Running}
-          onclick={() => xrayAction('start')}>Старт</Button
-        >
-        <Button
-          size="xs"
-          variant="outline"
-          disabled={busy !== '' || !xray?.Running}
-          onclick={() => xrayAction('stop')}>Стоп</Button
-        >
-        <Button size="xs" variant="destructive" disabled={busy !== ''} onclick={() => xrayAction('restart')}
-          >Рестарт</Button
-        >
+      </div>
+      <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span>{xray?.Version || 'версия —'}</span>
+        <div class="flex gap-1">
+          <Button size="xs" variant="outline" disabled={busy !== '' || !!xray?.Running} onclick={() => xrayAction('start')}>Старт</Button>
+          <Button size="xs" variant="outline" disabled={busy !== '' || !xray?.Running} onclick={() => xrayAction('stop')}>Стоп</Button>
+          <Button size="xs" variant="destructive" disabled={busy !== ''} onclick={() => xrayAction('restart')}>Рестарт</Button>
+        </div>
       </div>
     </div>
   </div>
