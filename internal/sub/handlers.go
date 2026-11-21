@@ -42,7 +42,7 @@ func jsonError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
-// recordDevice сохраняет заголовки клиента для экрана HWID. Ошибки
+// recordDevice сохраняет заголовки клиента для списка устройств. Ошибки
 // только логируем: подписка важнее статистики.
 func (h *Handlers) recordDevice(r *http.Request, username string) {
 	ip := r.RemoteAddr
@@ -56,7 +56,6 @@ func (h *Handlers) recordDevice(r *http.Request, username string) {
 		}
 	}
 	meta := store.DeviceMeta{
-		HWID:      clipHeader(r.Header.Get("X-HWID")),
 		Platform:  clipHeader(r.Header.Get("X-Device-OS")),
 		OSVersion: clipHeader(r.Header.Get("X-Ver-OS")),
 		Model:     clipHeader(r.Header.Get("X-Device-Model")),

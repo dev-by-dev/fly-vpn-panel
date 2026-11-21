@@ -347,7 +347,6 @@
           <tr>
             <th class="px-3 py-2 font-medium">Юзер</th>
             <th class="px-3 py-2 font-medium">ID</th>
-            <th class="px-3 py-2 font-medium">HWID</th>
             <th class="px-3 py-2 font-medium">IP</th>
             <th class="px-3 py-2 font-medium">Страна</th>
             <th class="px-3 py-2 font-medium">Провайдер</th>
@@ -371,7 +370,6 @@
                 </div>
               </td>
               <td class="px-3 py-2 text-muted-foreground">{userId(d.Username)}</td>
-              <td class="px-3 py-2 font-mono text-xs">{d.HWID || '—'}</td>
               <td class="px-3 py-2 font-mono text-xs">{d.IP}</td>
               <td class="px-3 py-2 text-xs">{flagOf(d.Country)} {d.Country || '—'}</td>
               <td class="px-3 py-2 text-xs text-muted-foreground">{d.Provider || '—'}</td>
@@ -387,7 +385,7 @@
               </td>
             </tr>
           {:else}
-            <tr><td class="px-3 py-2 text-muted-foreground" colspan="12">Устройств пока нет</td></tr>
+            <tr><td class="px-3 py-2 text-muted-foreground" colspan="11">Устройств пока нет</td></tr>
           {/each}
         </tbody>
       </table>
