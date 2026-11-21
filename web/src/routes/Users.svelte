@@ -16,6 +16,7 @@
     disabled_reason: string;
     used_bytes: number;
     online_count: number;
+    device_count: number;
     last_seen: string;
   };
 
@@ -88,6 +89,11 @@
   function pct(u: UserRow): number {
     if (u.quota_bytes <= 0) return 0;
     return Math.min(100, Math.round((u.used_bytes / u.quota_bytes) * 100));
+  }
+
+  // ID юзера по имени — в списке устройств xray отдаёт только username.
+  function userId(name: string): number | string {
+    return users.find((u) => u.username === name)?.id ?? '—';
   }
 
   // Относительное «сколько назад» для подписи под ником.
@@ -235,6 +241,7 @@
       <tr>
         <th class="px-3 py-2 font-medium">Юзернейм</th>
         <th class="px-3 py-2 font-medium">ID</th>
+          <th class="px-3 py-2 font-medium">Σ</th>
         <th class="px-3 py-2 font-medium">Статус</th>
         <th class="px-3 py-2 font-medium">Онлайн</th>
         <th class="px-3 py-2 font-medium">Истекает</th>
@@ -261,6 +268,7 @@
             </div>
           </td>
           <td class="px-3 py-2 text-muted-foreground">{u.id}</td>
+          <td class="px-3 py-2">{u.device_count}</td>
           <td class="px-3 py-2">
             <span
               class="inline-flex rounded-md px-2 py-0.5 text-xs font-medium {u.disabled
@@ -304,7 +312,12 @@
 {:else}
   <div class="mt-4 rounded-xl border border-sky-500/20 bg-sky-500/5 p-4">
     <div class="flex items-center justify-between">
-      <h2 class="font-medium">HWID / устройства</h2>
+      <div>
+        <h2 class="font-medium">HWID / устройства</h2>
+        <p class="text-xs text-muted-foreground">
+          xray отдаёт только имя и IP; платформа, версия и UA недоступны
+        </p>
+      </div>
       <div class="flex gap-2">
         <Button size="xs" variant="outline" onclick={loadDevices}>Обновить</Button>
         <Button size="xs" variant="outline" onclick={() => (showDevices = false)}>К списку</Button>
@@ -318,7 +331,12 @@
         <thead class="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
           <tr>
             <th class="px-3 py-2 font-medium">Юзер</th>
+            <th class="px-3 py-2 font-medium">ID</th>
             <th class="px-3 py-2 font-medium">HWID / IP</th>
+            <th class="px-3 py-2 font-medium">Платформа</th>
+            <th class="px-3 py-2 font-medium">Версия</th>
+            <th class="px-3 py-2 font-medium">Модель</th>
+            <th class="px-3 py-2 font-medium">User-Agent</th>
             <th class="px-3 py-2 font-medium">Первый вход</th>
             <th class="px-3 py-2 font-medium">Активность</th>
           </tr>
@@ -334,7 +352,12 @@
                   <span class="font-medium">{d.Username}</span>
                 </div>
               </td>
+              <td class="px-3 py-2 text-muted-foreground">{userId(d.Username)}</td>
               <td class="px-3 py-2 font-mono text-xs">{d.IP}</td>
+              <td class="px-3 py-2 text-muted-foreground">—</td>
+              <td class="px-3 py-2 text-muted-foreground">—</td>
+              <td class="px-3 py-2 text-muted-foreground">—</td>
+              <td class="px-3 py-2 text-muted-foreground">—</td>
               <td class="px-3 py-2 text-muted-foreground">{fmtDate(d.FirstSeen)}</td>
               <td class="px-3 py-2">
                 <div class="text-xs uppercase tracking-wide text-muted-foreground">
