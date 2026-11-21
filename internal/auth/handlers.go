@@ -362,8 +362,10 @@ func normalizeCode(s string) string {
 }
 
 // clientIP is the rate-limit key. When the request arrives from a
-// loopback RemoteAddr (the reverse proxy on the same host), the first
-// X-Forwarded-For IP is the real client — keying on 127.0.0.1 there
+// loopback RemoteAddr (the reverse proxy on the same host), the real
+// client is the LAST X-Forwarded-For entry: a proxy appends the peer IP
+// to any client-supplied XFF ("spoofed, real"), so the first entry is
+// attacker-controlled and must not be trusted. Keying on 127.0.0.1
 // would share one global 5/min budget across all clients. XFF is
 // trusted ONLY from loopback; a direct client keeps its own address.
 func clientIP(r *http.Request) string {
@@ -373,8 +375,9 @@ func clientIP(r *http.Request) string {
 	}
 	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			if first := strings.TrimSpace(strings.SplitN(xff, ",", 2)[0]); first != "" {
-				return first
+			parts := strings.Split(xff, ",")
+			if last := strings.TrimSpace(parts[len(parts)-1]); last != "" {
+				return last
 			}
 		}
 	}

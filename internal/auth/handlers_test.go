@@ -278,9 +278,11 @@ func TestLoginRateLimit(t *testing.T) {
 }
 
 // TestLoginRateLimitXFF: behind the reverse proxy every client shares
-// RemoteAddr 127.0.0.1; the limiter must key on the first
+// RemoteAddr 127.0.0.1; the limiter must key on the LAST
 // X-Forwarded-For IP (loopback only) so clients get independent
-// budgets instead of one shared global 5/min limit.
+// budgets instead of one shared global 5/min limit. The proxy appends
+// the real peer IP to any client-supplied XFF, so a spoofed FIRST
+// entry must be ignored — rotating it must not grant a fresh budget.
 func TestLoginRateLimitXFF(t *testing.T) {
 	h := newTestEnv(t)
 	createAdmin(t, h.Store, "a-sufficiently-long-password")
@@ -302,6 +304,12 @@ func TestLoginRateLimitXFF(t *testing.T) {
 	// A different X-FF client has an independent budget: 401, not 429.
 	if rr := postJSONXFF(t, h.Login, creds(), loopback, "198.51.100.30"); rr.Code != http.StatusUnauthorized {
 		t.Fatalf("different XFF status = %d, want 401 (independent rate limit)", rr.Code)
+	}
+	// Spoofed FIRST entry with the exhausted real client LAST: the proxy
+	// appends the real IP, so the limiter must key on the last entry and
+	// still 429 — rotating the spoofed first entry grants no fresh budget.
+	if rr := postJSONXFF(t, h.Login, creds(), loopback, "198.51.100.77, 203.0.113.20"); rr.Code != http.StatusTooManyRequests {
+		t.Fatalf("spoofed-first XFF status = %d, want 429 (last entry is the key)", rr.Code)
 	}
 	// Off-loopback RemoteAddr must ignore XFF entirely: this fresh
 	// client reuses the exhausted XFF value and must not be 429'd by it.
