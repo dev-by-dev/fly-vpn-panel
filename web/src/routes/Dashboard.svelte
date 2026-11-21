@@ -5,7 +5,6 @@
   import TrafficChart from '$lib/components/TrafficChart.svelte';
   import { fmtBytes, fmtRate, type Bucket } from '$lib/traffic';
 
-  type Device = { Username: string; IP: string; FirstSeen: string; LastSeen: string };
   // xray Status has no json tags → Go field names capitalized; Uptime = ns.
   type XrayStatus = { Running: boolean; PID: number; Uptime: number; Restarts: number; Version: string };
   type Summary = { total_up: number; total_down: number; online_count: number };
@@ -27,16 +26,11 @@
   let live = $state(false);
   let liveBuckets = $state<Bucket[]>([]);
   let liveInterval = $state(30);
-  let devices = $state<Device[]>([]);
   let xray = $state<XrayStatus | null>(null);
   let summary = $state<Summary | null>(null);
   let sys = $state<SystemStats | null>(null);
   let error = $state('');
   let busy = $state('');
-
-  function fmtDate(iso: string): string {
-    return new Date(iso).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'medium' });
-  }
 
   async function loadTraffic() {
     try {
@@ -83,14 +77,12 @@
 
   async function loadRest() {
     try {
-      const [dev, st, sum, us, sy] = await Promise.all([
-        apiFetch('/api/stats/online'),
+      const [st, sum, us, sy] = await Promise.all([
         apiFetch('/api/xray/status'),
         apiFetch('/api/stats/summary'),
         apiFetch('/api/users'),
         apiFetch('/api/system'),
       ]);
-      if (dev.ok) devices = (await dev.json()) as Device[];
       if (st.ok) xray = (await st.json()) as XrayStatus;
       if (sum.ok) summary = (await sum.json()) as Summary;
       if (us.ok) users = ((await us.json()) as { username: string }[]).slice(0, 100);
@@ -217,30 +209,6 @@
       </div>
     </div>
   </div>
-</div>
-
-<div class="mt-3 rounded-lg border bg-card p-3">
-  <h2 class="font-medium">Онлайн-устройства</h2>
-  <table class="mt-2 w-full text-sm">
-    <thead class="text-left text-muted-foreground">
-      <tr>
-        <th class="py-1 font-medium">Юзер</th>
-        <th class="py-1 font-medium">IP</th>
-        <th class="py-1 font-medium">Последняя активность</th>
-      </tr>
-    </thead>
-    <tbody>
-      {#each devices as d (d.Username + d.IP)}
-        <tr class="border-t">
-          <td class="py-1.5 font-medium">{d.Username}</td>
-          <td class="py-1.5 font-mono text-xs">{d.IP}</td>
-          <td class="py-1.5">{fmtDate(d.LastSeen)}</td>
-        </tr>
-      {:else}
-        <tr><td class="py-2 text-muted-foreground" colspan="3">Никого нет</td></tr>
-      {/each}
-    </tbody>
-  </table>
 </div>
 
 <!-- Summary totals -->
