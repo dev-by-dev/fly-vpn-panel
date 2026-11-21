@@ -26,7 +26,18 @@
   let sub = $state<{ username: string; url: string; formats: string[] } | null>(null);
   let copied = $state(false);
   // HWID/устройства: отдельный вид из меню вкладки «Юзеры».
-  type DeviceRow = { Username: string; IP: string; FirstSeen: string; LastSeen: string; online: boolean };
+  type DeviceRow = {
+    Username: string;
+    IP: string;
+    FirstSeen: string;
+    LastSeen: string;
+    online: boolean;
+    HWID: string;
+    Platform: string;
+    OSVersion: string;
+    Model: string;
+    UserAgent: string;
+  };
   let showDevices = $state(false);
   let devices = $state<DeviceRow[]>([]);
   let devicesErr = $state('');
@@ -312,12 +323,7 @@
 {:else}
   <div class="mt-4 rounded-xl border border-sky-500/20 bg-sky-500/5 p-4">
     <div class="flex items-center justify-between">
-      <div>
-        <h2 class="font-medium">HWID / устройства</h2>
-        <p class="text-xs text-muted-foreground">
-          xray отдаёт только имя и IP; платформа, версия и UA недоступны
-        </p>
-      </div>
+      <h2 class="font-medium">HWID / устройства</h2>
       <div class="flex gap-2">
         <Button size="xs" variant="outline" onclick={loadDevices}>Обновить</Button>
         <Button size="xs" variant="outline" onclick={() => (showDevices = false)}>К списку</Button>
@@ -353,11 +359,12 @@
                 </div>
               </td>
               <td class="px-3 py-2 text-muted-foreground">{userId(d.Username)}</td>
+              <td class="px-3 py-2 font-mono text-xs">{d.HWID || '—'}</td>
               <td class="px-3 py-2 font-mono text-xs">{d.IP}</td>
-              <td class="px-3 py-2 text-muted-foreground">—</td>
-              <td class="px-3 py-2 text-muted-foreground">—</td>
-              <td class="px-3 py-2 text-muted-foreground">—</td>
-              <td class="px-3 py-2 text-muted-foreground">—</td>
+              <td class="px-3 py-2 text-muted-foreground">{d.Platform || '—'}</td>
+              <td class="px-3 py-2 text-muted-foreground">{d.OSVersion || '—'}</td>
+              <td class="px-3 py-2 text-muted-foreground">{d.Model || '—'}</td>
+              <td class="px-3 py-2 text-muted-foreground">{d.UserAgent || '—'}</td>
               <td class="px-3 py-2 text-muted-foreground">{fmtDate(d.FirstSeen)}</td>
               <td class="px-3 py-2">
                 <div class="text-xs uppercase tracking-wide text-muted-foreground">
@@ -366,7 +373,7 @@
               </td>
             </tr>
           {:else}
-            <tr><td class="px-3 py-2 text-muted-foreground" colspan="4">Устройств пока нет</td></tr>
+            <tr><td class="px-3 py-2 text-muted-foreground" colspan="10">Устройств пока нет</td></tr>
           {/each}
         </tbody>
       </table>

@@ -168,7 +168,7 @@ func (p *Poller) tick(ctx context.Context) {
 			}
 			ipsByUser[name] = ips
 			for _, ip := range ips {
-				if err := p.st.DeviceUpsert(name, ip, now); err != nil {
+				if err := p.st.DeviceUpsert(name, ip, store.DeviceMeta{}, now); err != nil {
 					log.Printf("stats: device %q/%q: %v", name, ip, err)
 				}
 			}

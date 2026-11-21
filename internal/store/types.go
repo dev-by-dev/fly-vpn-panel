@@ -49,6 +49,12 @@ type Device struct {
 	IP        string
 	FirstSeen time.Time
 	LastSeen  time.Time
+	// Заголовки клиента с запроса подписки; xray их не отдаёт.
+	HWID      string
+	Platform  string
+	OSVersion string
+	Model     string
+	UserAgent string
 }
 
 // Bucket is an aggregated traffic sample for one time bucket.

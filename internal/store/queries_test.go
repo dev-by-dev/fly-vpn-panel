@@ -370,10 +370,10 @@ func TestDeviceUpsert(t *testing.T) {
 
 	t1 := time.Date(2026, 11, 20, 9, 0, 0, 0, time.UTC)
 	t2 := t1.Add(2 * time.Hour)
-	if err := s.DeviceUpsert("alice", "203.0.113.10", t1); err != nil {
+	if err := s.DeviceUpsert("alice", "203.0.113.10", DeviceMeta{}, t1); err != nil {
 		t.Fatalf("DeviceUpsert(): %v", err)
 	}
-	if err := s.DeviceUpsert("alice", "203.0.113.10", t2); err != nil {
+	if err := s.DeviceUpsert("alice", "203.0.113.10", DeviceMeta{}, t2); err != nil {
 		t.Fatalf("DeviceUpsert() again: %v", err)
 	}
 
@@ -393,7 +393,7 @@ func TestDeviceUpsert(t *testing.T) {
 			d.FirstSeen, d.LastSeen, t1, t2)
 	}
 
-	if err := s.DeviceUpsert("alice", "203.0.113.11", t2); err != nil {
+	if err := s.DeviceUpsert("alice", "203.0.113.11", DeviceMeta{}, t2); err != nil {
 		t.Fatalf("DeviceUpsert() new ip: %v", err)
 	}
 	online, err := s.DevicesOnline(t2.Add(-time.Minute))

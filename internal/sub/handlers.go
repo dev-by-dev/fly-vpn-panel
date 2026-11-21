@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"flypanel/internal/store"
@@ -37,6 +40,38 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func jsonError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+// recordDevice сохраняет заголовки клиента для экрана HWID. Ошибки
+// только логируем: подписка важнее статистики.
+func (h *Handlers) recordDevice(r *http.Request, username string) {
+	ip := r.RemoteAddr
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		ip = host
+	}
+	// X-Forwarded-For доверяем только локальному Caddy.
+	if ip == "127.0.0.1" || ip == "::1" {
+		if first, _, _ := strings.Cut(r.Header.Get("X-Forwarded-For"), ","); strings.TrimSpace(first) != "" {
+			ip = strings.TrimSpace(first)
+		}
+	}
+	meta := store.DeviceMeta{
+		HWID:      clipHeader(r.Header.Get("X-HWID")),
+		Platform:  clipHeader(r.Header.Get("X-Device-OS")),
+		OSVersion: clipHeader(r.Header.Get("X-Ver-OS")),
+		Model:     clipHeader(r.Header.Get("X-Device-Model")),
+		UserAgent: clipHeader(r.UserAgent()),
+	}
+	if err := h.Store.DeviceUpsert(username, ip, meta, time.Now().UTC()); err != nil {
+		log.Printf("sub: device record %q: %v", username, err)
+	}
+}
+
+func clipHeader(s string) string {
+	if len(s) > 256 {
+		return s[:256]
+	}
+	return s
 }
 
 // Sub serves GET /sub/{token} and GET /sub/{token}/{format}. Unknown and
@@ -75,6 +110,8 @@ func (h *Handlers) Sub(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusForbidden, "expired")
 		return
 	}
+	h.recordDevice(r, u.Username)
+
 	format := r.PathValue("format")
 	if format == "" {
 		format = FormatForUA(r.UserAgent())
