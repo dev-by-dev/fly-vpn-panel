@@ -61,8 +61,14 @@
 
   // Намерение из шапки: одноразовое действие при переходе на страницу.
   $effect(() => {
-    if (usersIntent.view !== 'devices') return;
+    const view = usersIntent.view;
+    if (!view) return;
     usersIntent.view = null;
+    // «Юзеры» в меню возвращает список даже если hash уже #/users.
+    if (view === 'list') {
+      showDevices = false;
+      return;
+    }
     showDevices = true;
     void loadDevices();
   });

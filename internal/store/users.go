@@ -127,6 +127,10 @@ func (s *Store) UserUpdate(u *User) error {
 
 // UserDelete removes the user with the given id, or ErrNotFound.
 func (s *Store) UserDelete(id int64) error {
+	var username string
+	if err := s.DB().QueryRow(`SELECT username FROM users WHERE id = ?`, id).Scan(&username); err != nil {
+		return ErrNotFound
+	}
 	res, err := s.DB().Exec(`DELETE FROM users WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("user delete: %w", err)
@@ -135,6 +139,13 @@ func (s *Store) UserDelete(id int64) error {
 		return fmt.Errorf("user delete: rows affected: %w", err)
 	} else if n == 0 {
 		return ErrNotFound
+	}
+	// Устройства и трафик удалённого юзера не должны висеть в панели.
+	if _, err := s.DB().Exec(`DELETE FROM devices WHERE username = ?`, username); err != nil {
+		return fmt.Errorf("user delete: devices: %w", err)
+	}
+	if _, err := s.DB().Exec(`DELETE FROM traffic_samples WHERE username = ?`, username); err != nil {
+		return fmt.Errorf("user delete: samples: %w", err)
 	}
 	return nil
 }

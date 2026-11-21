@@ -85,7 +85,10 @@
                   <a
                     href="#/users"
                     class="block rounded px-2 py-1.5 text-sm hover:bg-muted"
-                    onclick={() => (usersMenu = false)}>Юзеры</a
+                    onclick={() => {
+                      usersIntent.view = 'list';
+                      usersMenu = false;
+                    }}>Юзеры</a
                   >
                   <button
                     type="button"
