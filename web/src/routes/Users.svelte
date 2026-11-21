@@ -189,10 +189,12 @@
 
 <div class="flex items-center justify-between">
   <h1 class="text-2xl font-semibold">Пользователи</h1>
-  <div class="flex gap-2">
-    <Button variant="outline" onclick={load}>Обновить</Button>
-    <Button onclick={() => (dialog = 'create')}>Добавить</Button>
-  </div>
+  {#if !showDevices}
+    <div class="flex gap-2">
+      <Button variant="outline" onclick={load}>Обновить</Button>
+      <Button onclick={() => (dialog = 'create')}>Добавить</Button>
+    </div>
+  {/if}
 </div>
 
 {#if error}
