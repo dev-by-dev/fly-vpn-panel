@@ -3,7 +3,7 @@
   import { apiFetch } from '$lib/api';
   import { Button } from '$lib/components/ui/button';
   import TrafficChart from '$lib/components/TrafficChart.svelte';
-  import { fmtBytes, fmtRate, fmtUptime, type Bucket } from '$lib/traffic';
+  import { fmtBytes, fmtRate, type Bucket } from '$lib/traffic';
 
   type Device = { Username: string; IP: string; FirstSeen: string; LastSeen: string };
   // xray Status has no json tags → Go field names capitalized; Uptime = ns.
@@ -185,6 +185,62 @@
       </div>
     {/if}
   </div>
+  <div class="rounded-lg border bg-card px-3 py-2">
+    <div class="flex items-baseline gap-2">
+      <span class="text-xs text-muted-foreground">xray</span>
+      <span
+        class="text-lg font-semibold leading-none {xray?.Running
+          ? 'text-emerald-400'
+          : 'text-red-400'}"
+      >
+        {xray ? (xray.Running ? 'Работает' : 'Остановлен') : '—'}
+      </span>
+    </div>
+    <div class="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+      <span>{xray?.Version || 'версия —'}</span>
+      <div class="flex gap-1">
+        <Button
+          size="xs"
+          variant="outline"
+          disabled={busy !== '' || !!xray?.Running}
+          onclick={() => xrayAction('start')}>Старт</Button
+        >
+        <Button
+          size="xs"
+          variant="outline"
+          disabled={busy !== '' || !xray?.Running}
+          onclick={() => xrayAction('stop')}>Стоп</Button
+        >
+        <Button size="xs" variant="destructive" disabled={busy !== ''} onclick={() => xrayAction('restart')}
+          >Рестарт</Button
+        >
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mt-3 rounded-lg border bg-card p-3">
+  <h2 class="font-medium">Онлайн-устройства</h2>
+  <table class="mt-2 w-full text-sm">
+    <thead class="text-left text-muted-foreground">
+      <tr>
+        <th class="py-1 font-medium">Юзер</th>
+        <th class="py-1 font-medium">IP</th>
+        <th class="py-1 font-medium">Последняя активность</th>
+      </tr>
+    </thead>
+    <tbody>
+      {#each devices as d (d.Username + d.IP)}
+        <tr class="border-t">
+          <td class="py-1.5 font-medium">{d.Username}</td>
+          <td class="py-1.5 font-mono text-xs">{d.IP}</td>
+          <td class="py-1.5">{fmtDate(d.LastSeen)}</td>
+        </tr>
+      {:else}
+        <tr><td class="py-2 text-muted-foreground" colspan="3">Никого нет</td></tr>
+      {/each}
+    </tbody>
+  </table>
 </div>
 
 <!-- Summary totals -->
@@ -255,74 +311,4 @@
     {/if}
   </div>
   <TrafficChart buckets={shownBuckets} rate={live} height={260} />
-</div>
-
-<!-- Xray status + online devices -->
-<div class="mt-4 grid gap-4 lg:grid-cols-2">
-  <div class="rounded-xl border bg-card p-4">
-    <h2 class="font-medium">xray</h2>
-    {#if xray}
-      <div class="mt-2 space-y-1 text-sm">
-        <div class="flex items-center gap-2">
-          <span
-            class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium {xray.Running
-              ? 'bg-emerald-500/15 text-emerald-400'
-              : 'bg-red-500/15 text-red-400'}"
-          >
-            {xray.Running ? 'Работает' : 'Остановлен'}
-          </span>
-          <span class="text-muted-foreground">PID {xray.PID}</span>
-        </div>
-        <div>Версия: {xray.Version || '—'}</div>
-        <div>Аптайм: {fmtUptime(xray.Uptime)}</div>
-        <div>Рестартов: {xray.Restarts}</div>
-      </div>
-      <div class="mt-3 flex gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={busy !== '' || xray.Running}
-          onclick={() => xrayAction('start')}>Запустить</Button
-        >
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={busy !== '' || !xray.Running}
-          onclick={() => xrayAction('stop')}>Остановить</Button
-        >
-        <Button
-          size="sm"
-          variant="destructive"
-          disabled={busy !== ''}
-          onclick={() => xrayAction('restart')}>Рестарт</Button
-        >
-      </div>
-    {:else}
-      <p class="mt-2 text-sm text-muted-foreground">Загрузка…</p>
-    {/if}
-  </div>
-
-  <div class="rounded-xl border bg-card p-4">
-    <h2 class="font-medium">Онлайн-устройства</h2>
-    <table class="mt-2 w-full text-sm">
-      <thead class="text-left text-muted-foreground">
-        <tr>
-          <th class="py-1 font-medium">Юзер</th>
-          <th class="py-1 font-medium">IP</th>
-          <th class="py-1 font-medium">Последняя активность</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each devices as d (d.Username + d.IP)}
-          <tr class="border-t">
-            <td class="py-1.5 font-medium">{d.Username}</td>
-            <td class="py-1.5 font-mono text-xs">{d.IP}</td>
-            <td class="py-1.5">{fmtDate(d.LastSeen)}</td>
-          </tr>
-        {:else}
-          <tr><td class="py-2 text-muted-foreground" colspan="3">Никого нет</td></tr>
-        {/each}
-      </tbody>
-    </table>
-  </div>
 </div>
