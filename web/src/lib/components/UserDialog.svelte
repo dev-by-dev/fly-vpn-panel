@@ -23,8 +23,11 @@
 
   // shortcut: квота в ГБ с 3 знаками — погрешность ≤1 МБ против байтового ввода
   let username = $state(user?.username ?? '');
-  // новый юзер: +30 дней по умолчанию
-  let expiry = $state(toLocalInput(user?.expiry ?? new Date(Date.now() + 30 * 864e5).toISOString()));
+  // новый юзер: +30 дней по умолчанию; дата и время — отдельными полями,
+  // чтобы дата открывалась нативным календарём.
+  const expiry0 = toLocalInput(user?.expiry ?? new Date(Date.now() + 30 * 864e5).toISOString());
+  let expiryDate = $state(expiry0.slice(0, 10));
+  let expiryTime = $state(expiry0.slice(11, 16));
   let quotaGB = $state(user ? Number((user.quota_bytes / GB).toFixed(3)) : 0);
   let period = $state(user?.quota_period ?? 'none');
   let devices = $state(user?.device_limit ?? 0);
@@ -56,7 +59,7 @@
       return;
     }
     const body: Record<string, unknown> = {
-      expiry: new Date(expiry).toISOString(),
+      expiry: new Date(`${expiryDate}T${expiryTime || '00:00'}`).toISOString(),
       quota_bytes: Math.round(quotaGB * GB),
       quota_period: period,
       device_limit: devices,
@@ -175,7 +178,10 @@
             </div>
             <div class="mt-3 grid gap-1.5">
               <Label for="u-expiry">Действует до</Label>
-              <Input id="u-expiry" type="datetime-local" bind:value={expiry} required />
+              <div class="flex gap-2">
+                <Input id="u-expiry" type="date" bind:value={expiryDate} required class="flex-1" />
+                <Input id="u-expiry-time" type="time" bind:value={expiryTime} required class="w-32" />
+              </div>
             </div>
             {#if isEdit}
               <label class="mt-3 flex items-center gap-2 text-sm">
