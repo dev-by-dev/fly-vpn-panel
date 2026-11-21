@@ -22,6 +22,9 @@ type Handlers struct {
 	Store *store.Store
 	JWT   *JWT
 	RL    *RateLimiter
+	// SecureCookies sets the Secure attribute on fp_access/fp_refresh
+	// (issuance and clearing); true when the panel is served over HTTPS.
+	SecureCookies bool
 }
 
 // --- request/response shapes ---
@@ -34,6 +37,11 @@ type loginRequest struct {
 
 type codeRequest struct {
 	Code string `json:"code"`
+}
+
+type passwordRequest struct {
+	Old string `json:"old"`
+	New string `json:"new"`
 }
 
 func jsonError(w http.ResponseWriter, status int, msg string) {
@@ -52,37 +60,39 @@ func decodeJSON(r *http.Request, v any) error {
 
 // --- cookies ---
 
-func accessCookie(value string) *http.Cookie {
+func (h *Handlers) accessCookie(value string) *http.Cookie {
 	return &http.Cookie{
 		Name:     AccessCookie,
 		Value:    value,
 		Path:     "/",
 		MaxAge:   int(AccessTTL.Seconds()),
 		HttpOnly: true,
+		Secure:   h.SecureCookies,
 		SameSite: http.SameSiteStrictMode,
 	}
 }
 
-func refreshCookie(value string) *http.Cookie {
+func (h *Handlers) refreshCookie(value string) *http.Cookie {
 	return &http.Cookie{
 		Name:     RefreshCookie,
 		Value:    value,
 		Path:     "/api/auth",
 		MaxAge:   int(RefreshTTL.Seconds()),
 		HttpOnly: true,
+		Secure:   h.SecureCookies,
 		SameSite: http.SameSiteStrictMode,
 	}
 }
 
-func setAuthCookies(w http.ResponseWriter, access, refresh string) {
-	http.SetCookie(w, accessCookie(access))
-	http.SetCookie(w, refreshCookie(refresh))
+func (h *Handlers) setAuthCookies(w http.ResponseWriter, access, refresh string) {
+	http.SetCookie(w, h.accessCookie(access))
+	http.SetCookie(w, h.refreshCookie(refresh))
 }
 
-func clearAuthCookies(w http.ResponseWriter) {
-	del := &http.Cookie{Name: AccessCookie, Value: "", Path: "/", MaxAge: -1}
+func (h *Handlers) clearAuthCookies(w http.ResponseWriter) {
+	del := &http.Cookie{Name: AccessCookie, Value: "", Path: "/", MaxAge: -1, Secure: h.SecureCookies}
 	http.SetCookie(w, del)
-	del = &http.Cookie{Name: RefreshCookie, Value: "", Path: "/api/auth", MaxAge: -1}
+	del = &http.Cookie{Name: RefreshCookie, Value: "", Path: "/api/auth", MaxAge: -1, Secure: h.SecureCookies}
 	http.SetCookie(w, del)
 }
 
@@ -161,7 +171,7 @@ func (h *Handlers) issueSession(w http.ResponseWriter) error {
 	if err := h.Store.RefreshTokenInsert(hash, time.Now().Add(RefreshTTL)); err != nil {
 		return err
 	}
-	setAuthCookies(w, access, raw)
+	h.setAuthCookies(w, access, raw)
 	return nil
 }
 
@@ -187,7 +197,7 @@ func (h *Handlers) Refresh(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, "internal")
 		return
 	}
-	http.SetCookie(w, accessCookie(access))
+	http.SetCookie(w, h.accessCookie(access))
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -197,7 +207,7 @@ func (h *Handlers) Logout(w http.ResponseWriter, r *http.Request) {
 		// Unknown hashes are not an error for logout.
 		_ = h.Store.RefreshTokenRevoke(hashToken(c.Value))
 	}
-	clearAuthCookies(w)
+	h.clearAuthCookies(w)
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -296,6 +306,45 @@ func (h *Handlers) Disable2FA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.Store.AdminSetTOTP("", false); err != nil {
+		jsonError(w, http.StatusInternalServerError, "internal")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// ChangePassword serves POST /api/auth/password (mounted behind the JWT
+// middleware by the router). The old password must verify and the new one
+// needs 12+ characters; on success every refresh token is revoked so all
+// other sessions must re-authenticate.
+func (h *Handlers) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	var req passwordRequest
+	if err := decodeJSON(r, &req); err != nil || req.Old == "" || req.New == "" {
+		jsonError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	admin, err := h.Store.AdminGet()
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "internal")
+		return
+	}
+	if !VerifyPassword(admin.PasswordHash, req.Old) {
+		jsonError(w, http.StatusUnauthorized, "invalid_credentials")
+		return
+	}
+	if len(req.New) < 12 {
+		jsonError(w, http.StatusBadRequest, "password_too_short")
+		return
+	}
+	hash, err := HashPassword(req.New)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "internal")
+		return
+	}
+	if err := h.Store.AdminUpdatePassword(hash); err != nil {
+		jsonError(w, http.StatusInternalServerError, "internal")
+		return
+	}
+	if err := h.Store.RefreshTokenRevokeAll(); err != nil {
 		jsonError(w, http.StatusInternalServerError, "internal")
 		return
 	}
