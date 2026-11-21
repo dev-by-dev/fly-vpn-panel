@@ -17,6 +17,7 @@ import (
 	"flypanel/internal/api"
 	"flypanel/internal/auth"
 	"flypanel/internal/config"
+	"flypanel/internal/inbounds"
 	"flypanel/internal/stats"
 	"flypanel/internal/store"
 	"flypanel/internal/xray"
@@ -87,8 +88,8 @@ func serveCommand() {
 	poller := stats.NewPoller(st, xc, xc, interval)
 
 	// A broken or missing xray binary must not keep the panel down.
-	if err := mgr.Start(); err != nil {
-		log.Printf("serve: xray start: %v (serving HTTP without xray)", err)
+	if err := applyInitialXrayConfig(st, cfg, mgr); err != nil {
+		log.Printf("serve: initial xray apply: %v (serving HTTP without xray)", err)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -139,4 +140,16 @@ func serveCommand() {
 
 func usage() {
 	fmt.Fprintln(os.Stderr, "usage: flypanel <version|serve|admin init>")
+}
+
+// applyInitialXrayConfig writes the xray config generated from the
+// seeded store before xray first starts, so `xray run -c` has a valid
+// file instead of crash-looping on a missing one. Apply ends with
+// Mgr.Restart, which starts xray on the freshly written config.
+func applyInitialXrayConfig(st *store.Store, cfg *config.Config, mgr *xray.Manager) error {
+	routingJSON, err := st.SettingGet("routing")
+	if err != nil {
+		routingJSON = `{"domainStrategy":"AsIs","rules":[]}`
+	}
+	return inbounds.NewApplier(st, cfg, mgr).Apply(routingJSON)
 }
