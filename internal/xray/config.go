@@ -53,6 +53,12 @@ func GenerateConfig(inbounds []store.Inbound, activeUsers []store.User, routingJ
 			ib["settings"] = settings
 		}
 		settings["clients"] = clients
+		// xray 26.x rejects vless inbounds without decryption:"none".
+		if ib["protocol"] == "vless" {
+			if _, ok := settings["decryption"]; !ok {
+				settings["decryption"] = "none"
+			}
+		}
 		inList = append(inList, ib)
 	}
 

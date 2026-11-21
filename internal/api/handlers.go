@@ -289,7 +289,7 @@ func defaultInbound() (*store.Inbound, error) {
 		"port":     8443,
 		"tag":      "vless-xhttp",
 		"protocol": "vless",
-		"settings": map[string]any{"clients": []any{}},
+		"settings": map[string]any{"clients": []any{}, "decryption": "none"},
 		"streamSettings": map[string]any{
 			"network":  "xhttp",
 			"security": "reality",
