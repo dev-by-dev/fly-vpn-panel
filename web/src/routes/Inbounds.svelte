@@ -160,6 +160,7 @@
   </div>
 {/if}
 
+{#if !showMetrics}
 <p class="mt-2 text-sm text-yellow-400">Внимание: применение изменений = рестарт xray ~1–2 с</p>
 
 {#if error}
@@ -203,6 +204,7 @@
     </tbody>
   </table>
 </div>
+{/if}
 
 {#if editing}
   <InboundForm
