@@ -36,7 +36,10 @@
     Platform: string;
     OSVersion: string;
     Model: string;
-    UserAgent: string;
+    Country: string;
+  ASN: string;
+  Provider: string;
+  UserAgent: string;
   };
   let showDevices = $state(false);
   let devices = $state<DeviceRow[]>([]);
@@ -108,6 +111,12 @@
   }
 
   // Относительное «сколько назад» для подписи под ником.
+  // Флаг из ISO-кода страны; для пустого кода — прочерк.
+  function flagOf(cc: string): string {
+    if (!/^[A-Za-z]{2}$/.test(cc)) return '—';
+    return String.fromCodePoint(...[...cc.toUpperCase()].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
+  }
+
   function fmtAgo(iso: string): string {
     const t = Date.parse(iso);
     if (!t) return 'никогда';
@@ -338,7 +347,10 @@
           <tr>
             <th class="px-3 py-2 font-medium">Юзер</th>
             <th class="px-3 py-2 font-medium">ID</th>
-            <th class="px-3 py-2 font-medium">HWID / IP</th>
+            <th class="px-3 py-2 font-medium">HWID</th>
+            <th class="px-3 py-2 font-medium">IP</th>
+            <th class="px-3 py-2 font-medium">Страна</th>
+            <th class="px-3 py-2 font-medium">Провайдер</th>
             <th class="px-3 py-2 font-medium">Платформа</th>
             <th class="px-3 py-2 font-medium">Версия</th>
             <th class="px-3 py-2 font-medium">Модель</th>
@@ -361,6 +373,8 @@
               <td class="px-3 py-2 text-muted-foreground">{userId(d.Username)}</td>
               <td class="px-3 py-2 font-mono text-xs">{d.HWID || '—'}</td>
               <td class="px-3 py-2 font-mono text-xs">{d.IP}</td>
+              <td class="px-3 py-2 text-xs">{flagOf(d.Country)} {d.Country || '—'}</td>
+              <td class="px-3 py-2 text-xs text-muted-foreground">{d.Provider || '—'}</td>
               <td class="px-3 py-2 text-muted-foreground">{d.Platform || '—'}</td>
               <td class="px-3 py-2 text-muted-foreground">{d.OSVersion || '—'}</td>
               <td class="px-3 py-2 text-muted-foreground">{d.Model || '—'}</td>
@@ -373,7 +387,7 @@
               </td>
             </tr>
           {:else}
-            <tr><td class="px-3 py-2 text-muted-foreground" colspan="10">Устройств пока нет</td></tr>
+            <tr><td class="px-3 py-2 text-muted-foreground" colspan="12">Устройств пока нет</td></tr>
           {/each}
         </tbody>
       </table>

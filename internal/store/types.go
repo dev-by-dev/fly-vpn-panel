@@ -49,6 +49,9 @@ type Device struct {
 	IP        string
 	FirstSeen time.Time
 	LastSeen  time.Time
+	Country   string
+	ASN       string
+	Provider  string
 	// Заголовки клиента с запроса подписки; xray их не отдаёт.
 	HWID      string
 	Platform  string

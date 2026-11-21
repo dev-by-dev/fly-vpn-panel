@@ -43,7 +43,7 @@ func scanDevice(sc scanner) (*Device, error) {
 		firstSeen string
 		lastSeen  string
 	)
-	if err := sc.Scan(&d.Username, &d.IP, &firstSeen, &lastSeen, &d.HWID, &d.Platform, &d.OSVersion, &d.Model, &d.UserAgent); err != nil {
+	if err := sc.Scan(&d.Username, &d.IP, &firstSeen, &lastSeen, &d.Country, &d.ASN, &d.Provider, &d.HWID, &d.Platform, &d.OSVersion, &d.Model, &d.UserAgent); err != nil {
 		return nil, err
 	}
 	var err error
@@ -77,14 +77,14 @@ func (s *Store) devicesQuery(query string, args ...any) ([]Device, error) {
 // username then ip.
 func (s *Store) DevicesOnline(since time.Time) ([]Device, error) {
 	return s.devicesQuery(
-		`SELECT username, ip, first_seen, last_seen, hwid, platform, os_version, model, user_agent FROM devices
+		`SELECT username, ip, first_seen, last_seen, country, asn, provider, hwid, platform, os_version, model, user_agent FROM devices
 		WHERE last_seen >= ? ORDER BY username, ip`, fmtTime(since))
 }
 
 // DevicesForUser returns the user's devices ordered by ip.
 func (s *Store) DevicesForUser(username string) ([]Device, error) {
 	return s.devicesQuery(
-		`SELECT username, ip, first_seen, last_seen, hwid, platform, os_version, model, user_agent FROM devices
+		`SELECT username, ip, first_seen, last_seen, country, asn, provider, hwid, platform, os_version, model, user_agent FROM devices
 		WHERE username = ? ORDER BY ip`, username)
 }
 
@@ -93,6 +93,17 @@ func (s *Store) PruneDevices(before time.Time) error {
 	_, err := s.DB().Exec(`DELETE FROM devices WHERE last_seen < ?`, fmtTime(before))
 	if err != nil {
 		return fmt.Errorf("prune devices: %w", err)
+	}
+	return nil
+}
+
+// DeviceGeoSet stores the resolved country and provider for one device.
+func (s *Store) DeviceGeoSet(username, ip, country, asn, provider string) error {
+	_, err := s.DB().Exec(
+		`UPDATE devices SET country = ?, asn = ?, provider = ? WHERE username = ? AND ip = ?`,
+		country, asn, provider, username, ip)
+	if err != nil {
+		return fmt.Errorf("device geo set: %w", err)
 	}
 	return nil
 }

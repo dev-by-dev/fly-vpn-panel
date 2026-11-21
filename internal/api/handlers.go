@@ -1,18 +1,21 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"sync"
 	"time"
 
 	"flypanel/internal/config"
+	"flypanel/internal/geo"
 	"flypanel/internal/stats"
 	"flypanel/internal/store"
 	"flypanel/internal/sub"
@@ -222,6 +225,23 @@ func (h *Handlers) Devices(w http.ResponseWriter, r *http.Request) {
 	out := make([]row, 0, len(list))
 	for _, d := range list {
 		out = append(out, row{Device: d, Online: !d.LastSeen.Before(cutoff)})
+	}
+	// Страна/провайдер резолвятся фоном: первый показ может быть без флага.
+	for _, d := range list {
+		if d.Country != "" || geo.Reverse(d.IP) == "" {
+			continue
+		}
+		go func(d store.Device) {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			info, err := geo.Lookup(ctx, d.IP)
+			if err != nil || info.Country == "" {
+				return
+			}
+			if err := h.Store.DeviceGeoSet(d.Username, d.IP, info.Country, info.ASN, info.Provider); err != nil {
+				log.Printf("devices: geo %q/%q: %v", d.Username, d.IP, err)
+			}
+		}(d)
 	}
 	writeJSON(w, http.StatusOK, out)
 }
