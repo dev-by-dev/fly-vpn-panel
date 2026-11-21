@@ -203,7 +203,7 @@
   <p class="mt-2 text-sm text-red-400">{error}</p>
 {/if}
 
-<div class="mt-4 overflow-x-auto rounded-xl border">
+<div class="mt-4 overflow-x-auto rounded-xl border border-sky-500/20 bg-sky-500/5">
   <table class="w-full text-sm">
     <thead class="bg-muted/50 text-left text-muted-foreground">
       <tr>

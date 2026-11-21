@@ -153,7 +153,7 @@
 
 <div class="mt-4 grid max-w-2xl grid-cols-1 gap-6">
   <!-- Password -->
-  <section class="rounded-xl border bg-card p-4">
+  <section class="rounded-xl border border-sky-500/20 bg-sky-500/5 p-4">
     <h2 class="font-medium">Смена пароля</h2>
     <div class="mt-3 grid grid-cols-2 gap-3">
       <div>
@@ -174,7 +174,7 @@
   </section>
 
   <!-- Poll interval -->
-  <section class="rounded-xl border bg-card p-4">
+  <section class="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
     <h2 class="font-medium">Интервал поллинга</h2>
     <div class="mt-3 flex items-end gap-3">
       <div>
@@ -189,7 +189,7 @@
   </section>
 
   <!-- 2FA -->
-  <section class="rounded-xl border bg-card p-4">
+  <section class="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4">
     <h2 class="font-medium">Двухфакторная аутентификация</h2>
 
     {#if enroll}

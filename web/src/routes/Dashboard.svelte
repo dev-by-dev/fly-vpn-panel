@@ -146,7 +146,8 @@
 {/if}
 
 <!-- Host metrics -->
-<h2 class="mt-6 font-medium">Сервер</h2>
+<section class="mt-6 rounded-xl border border-sky-500/20 bg-sky-500/5 p-4">
+  <h2 class="font-medium">Сервер</h2>
 <div class="mt-3 flex flex-wrap gap-2">
   <div class="flex min-w-40 items-center gap-3 rounded-xl border bg-card px-3 py-2">
     <span class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-sky-500/10 text-sky-400">
@@ -225,9 +226,12 @@
   </div>
 </div>
 
+  </section>
+
 <!-- Summary totals -->
 <!-- User stats -->
-<h2 class="mt-6 font-medium">Пользователи</h2>
+<section class="mt-6 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+  <h2 class="font-medium">Пользователи</h2>
 <div class="mt-3 flex flex-wrap gap-2">
   {#each [
     { label: 'Всего', value: userStats.total, box: 'bg-sky-500/10 text-sky-400', icon: 'users' },
@@ -260,7 +264,10 @@
   {/each}
 </div>
 
-<h2 class="mt-6 font-medium">Трафик панели</h2>
+  </section>
+
+<section class="mt-6 rounded-xl border border-violet-500/20 bg-violet-500/5 p-4">
+  <h2 class="font-medium">Трафик панели</h2>
 <div class="mt-3 flex flex-wrap gap-2">
   <div class="rounded-lg border bg-card px-3 py-2">
     <div class="flex items-baseline gap-2">
@@ -282,8 +289,10 @@
   </div>
 </div>
 
+  </section>
+
 <!-- Traffic chart -->
-<div class="mt-4 rounded-xl border bg-card p-4">
+<div class="mt-6 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
   <div class="mb-3 flex flex-wrap items-center gap-3">
     <div class="flex gap-1">
       {#each [['day', 'День'], ['week', 'Неделя'], ['month', 'Месяц']] as [r, label] (r)}

@@ -252,7 +252,7 @@
 </div>
 
 {#if sub}
-  <div class="mt-4 rounded-xl border bg-card p-4">
+  <div class="mt-4 rounded-xl border border-sky-500/20 bg-sky-500/5 p-4">
     <h2 class="font-medium">Подписка: {sub.username}</h2>
     <div class="mt-2 flex items-center gap-2">
       <code class="flex-1 break-all rounded bg-muted px-2 py-1 text-xs">{sub.url}</code>
