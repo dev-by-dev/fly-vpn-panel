@@ -580,3 +580,21 @@ func TestTemplatePutNoSanitizer(t *testing.T) {
 		}
 	}
 }
+
+func TestLooksLikeClient(t *testing.T) {
+	cases := []struct {
+		name string
+		meta store.DeviceMeta
+		want bool
+	}{
+		{"bot", store.DeviceMeta{UserAgent: "TelegramBot (like TwitterBot)"}, false},
+		{"happ", store.DeviceMeta{UserAgent: "Happ/4.10.1/Android"}, true},
+		{"headers", store.DeviceMeta{Platform: "Android"}, true},
+		{"empty", store.DeviceMeta{}, false},
+	}
+	for _, c := range cases {
+		if got := looksLikeClient(c.meta); got != c.want {
+			t.Errorf("%s: looksLikeClient() = %v, want %v", c.name, got, c.want)
+		}
+	}
+}

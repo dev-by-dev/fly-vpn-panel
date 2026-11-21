@@ -61,6 +61,11 @@ func (h *Handlers) recordDevice(r *http.Request, username string) {
 		Model:     clipHeader(r.Header.Get("X-Device-Model")),
 		UserAgent: clipHeader(r.UserAgent()),
 	}
+	// Публичную ссылку дёргают боты и сканеры — устройством считаем
+	// только запрос от VPN-клиента.
+	if !looksLikeClient(meta) {
+		return
+	}
 	if err := h.Store.DeviceUpsert(username, ip, meta, time.Now().UTC()); err != nil {
 		log.Printf("sub: device record %q: %v", username, err)
 	}
@@ -250,4 +255,22 @@ func renderTest(format, tpl string) error {
 	}
 	_, err = RenderYAML(tpl, params)
 	return err
+}
+
+// looksLikeClient отсекает ботов и сканеры: подписка открыта всем, но
+// устройством является только запрос от VPN-клиента.
+func looksLikeClient(meta store.DeviceMeta) bool {
+	if meta.Platform != "" || meta.OSVersion != "" || meta.Model != "" {
+		return true
+	}
+	ua := strings.ToLower(meta.UserAgent)
+	for _, name := range []string{
+		"happ", "incy", "v2rayng", "v2ray", "clash", "mihomo", "hiddify",
+		"sing-box", "nekobox", "streisand", "shadowrocket", "karing", "sfa",
+	} {
+		if strings.Contains(ua, name) {
+			return true
+		}
+	}
+	return false
 }
