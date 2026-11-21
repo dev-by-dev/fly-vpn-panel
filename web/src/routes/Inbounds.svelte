@@ -3,14 +3,15 @@
   import { apiFetch } from '$lib/api';
   import { Button } from '$lib/components/ui/button';
   import InboundForm from '$lib/components/InboundForm.svelte';
+  import { inboundsIntent } from '$lib/inboundsIntent.svelte';
 
   type InboundRow = { id: number; tag: string; enabled: boolean; config: Record<string, any> };
 
   let inbounds = $state<InboundRow[]>([]);
   let error = $state('');
   let editing = $state<InboundRow | 'create' | null>(null);
-  // Два выпадающих меню в шапке: действия над инбаундами и метрики.
-  let menu = $state<'' | 'actions' | 'metrics'>('');
+  // Панель метрик открывается из меню вкладки «Inbounds» в шапке.
+  let showMetrics = $state(false);
   let metrics = $state<{ inbounds: { Tag: string; Up: number; Down: number }[]; online_count: number } | null>(null);
   let metricsErr = $state('');
 
@@ -61,10 +62,18 @@
     }
   }
 
-  function toggleMenu(which: 'actions' | 'metrics') {
-    menu = menu === which ? '' : which;
-    if (menu === 'metrics') loadMetrics();
-  }
+  // Намерение из шапки: одноразовое действие при переходе на страницу.
+  $effect(() => {
+    const action = inboundsIntent.action;
+    if (!action) return;
+    inboundsIntent.action = null;
+    if (action === 'create') {
+      editing = 'create';
+    } else {
+      showMetrics = true;
+      void loadMetrics();
+    }
+  });
 
   async function closeAndReload() {
     editing = null;
@@ -102,94 +111,54 @@
 
 <div class="flex items-center justify-between">
   <h1 class="text-2xl font-semibold">Inbounds</h1>
-  <div class="flex gap-2">
-    <div class="relative">
-      <Button variant="outline" onclick={() => toggleMenu('actions')}>Действия ▾</Button>
-      {#if menu === 'actions'}
-        <div class="absolute right-0 z-40 mt-1 w-80 rounded-xl border bg-card p-2 shadow-lg">
-          <button
-            type="button"
-            class="w-full rounded px-2 py-1.5 text-left text-sm hover:bg-muted"
-            onclick={() => {
-              editing = 'create';
-              menu = '';
-            }}>Добавить inbound</button
-          >
-          <div class="my-1 border-t"></div>
-          {#each inbounds as inb (inb.id)}
-            <div class="flex items-center justify-between gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted">
-              <span class="truncate font-medium">{inb.tag}</span>
-              <div class="flex shrink-0 gap-1">
-                <Button
-                  size="xs"
-                  variant="outline"
-                  onclick={() => {
-                    editing = inb;
-                    menu = '';
-                  }}>Настроить</Button
-                >
-                <Button
-                  size="xs"
-                  variant="destructive"
-                  onclick={() => {
-                    menu = '';
-                    remove(inb);
-                  }}>Удалить</Button
-                >
-              </div>
-            </div>
-          {:else}
-            <p class="px-2 py-1.5 text-sm text-muted-foreground">Инбаундов нет</p>
-          {/each}
-        </div>
-      {/if}
-    </div>
-    <div class="relative">
-      <Button variant="outline" onclick={() => toggleMenu('metrics')}>Метрики ▾</Button>
-      {#if menu === 'metrics'}
-        <div class="absolute right-0 z-40 mt-1 w-96 rounded-xl border bg-card p-3 shadow-lg">
-          {#if metrics}
-            <div class="grid grid-cols-3 gap-2">
-              <div class="rounded-lg border px-2 py-1.5">
-                <div class="text-xs text-muted-foreground">Инбаунды</div>
-                <div class="text-lg font-semibold leading-none">{metrics.inbounds.length}</div>
-              </div>
-              <div class="rounded-lg border px-2 py-1.5">
-                <div class="text-xs text-muted-foreground">Онлайн</div>
-                <div class="text-lg font-semibold leading-none">{metrics.online_count}</div>
-              </div>
-              <div class="rounded-lg border px-2 py-1.5">
-                <div class="text-xs text-muted-foreground">Трафик</div>
-                <div class="text-lg font-semibold leading-none">
-                  {fmtBytes(metrics.inbounds.reduce((a, i) => a + i.Up + i.Down, 0))}
-                </div>
-              </div>
-            </div>
-            <div class="mt-3 space-y-2">
-              {#each metrics.inbounds as m (m.Tag)}
-                <div class="rounded-lg border px-2 py-1.5">
-                  <div class="truncate text-sm font-medium">{m.Tag}</div>
-                  <div class="mt-0.5 flex gap-3 text-xs text-muted-foreground">
-                    <span>↑ {fmtBytes(m.Up)}</span>
-                    <span>↓ {fmtBytes(m.Down)}</span>
-                  </div>
-                </div>
-              {:else}
-                <p class="text-sm text-muted-foreground">Счётчиков пока нет</p>
-              {/each}
-            </div>
-          {:else}
-            <p class="text-sm text-muted-foreground">Загрузка…</p>
-          {/if}
-          {#if metricsErr}
-            <p class="mt-2 text-sm text-red-400">{metricsErr}</p>
-          {/if}
-          <Button size="xs" variant="outline" class="mt-2" onclick={loadMetrics}>Обновить</Button>
-        </div>
-      {/if}
-    </div>
-  </div>
 </div>
+
+{#if showMetrics}
+  <div class="mt-4 max-w-2xl rounded-xl border bg-card p-3">
+    <div class="flex items-center justify-between">
+      <h2 class="font-medium">Метрики</h2>
+      <div class="flex gap-1">
+        <Button size="xs" variant="outline" onclick={loadMetrics}>Обновить</Button>
+        <Button size="xs" variant="ghost" onclick={() => (showMetrics = false)}>Скрыть</Button>
+      </div>
+    </div>
+    {#if metrics}
+      <div class="mt-3 grid grid-cols-3 gap-2">
+        <div class="rounded-lg border bg-card px-3 py-2">
+          <div class="text-xs text-muted-foreground">Инбаунды</div>
+          <div class="text-lg font-semibold leading-none">{metrics.inbounds.length}</div>
+        </div>
+        <div class="rounded-lg border bg-card px-3 py-2">
+          <div class="text-xs text-muted-foreground">Онлайн</div>
+          <div class="text-lg font-semibold leading-none">{metrics.online_count}</div>
+        </div>
+        <div class="rounded-lg border bg-card px-3 py-2">
+          <div class="text-xs text-muted-foreground">Трафик</div>
+          <div class="text-lg font-semibold leading-none">
+            {fmtBytes(metrics.inbounds.reduce((a, m) => a + m.Up + m.Down, 0))}
+          </div>
+        </div>
+      </div>
+      <div class="mt-2 space-y-1 text-sm">
+        {#each metrics.inbounds as m (m.Tag)}
+          <div class="flex items-center justify-between gap-2 border-t pt-1">
+            <span class="truncate font-mono text-xs">{m.Tag}</span>
+            <span class="shrink-0 text-xs text-muted-foreground">
+              ↑ {fmtBytes(m.Up)} · ↓ {fmtBytes(m.Down)}
+            </span>
+          </div>
+        {:else}
+          <p class="text-muted-foreground">Счётчиков пока нет</p>
+        {/each}
+      </div>
+    {:else}
+      <p class="mt-2 text-sm text-muted-foreground">Загрузка…</p>
+    {/if}
+    {#if metricsErr}
+      <p class="mt-2 text-sm text-red-400">{metricsErr}</p>
+    {/if}
+  </div>
+{/if}
 
 <p class="mt-2 text-sm text-yellow-400">Внимание: применение изменений = рестарт xray ~1–2 с</p>
 
