@@ -63,7 +63,7 @@
         <Button variant="outline" class="w-full" onclick={() => logout()}>Выйти</Button>
       </div>
     </aside>
-    <main class="flex-1 p-6">
+    <main class="min-w-0 flex-1 p-6">
       <Router {routes} />
     </main>
   </div>

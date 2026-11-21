@@ -158,7 +158,9 @@ func TestSPAFallback(t *testing.T) {
 	if ct := rr.Header().Get("Content-Type"); ct != "text/html; charset=utf-8" {
 		t.Errorf("GET /users content-type = %q, want text/html", ct)
 	}
-	if !bytes.Contains(rr.Body.Bytes(), []byte("build me")) {
+	// dist/index.html перезаписывается реальной сборкой, поэтому проверяем
+	// стабильный маркер SPA, а не placeholder `build me`.
+	if !bytes.Contains(rr.Body.Bytes(), []byte(`<div id="app">`)) {
 		t.Errorf("GET /users body %q missing placeholder", rr.Body.String())
 	}
 

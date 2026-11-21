@@ -85,7 +85,7 @@
 {/if}
 
 <!-- Summary totals -->
-<div class="mt-4 grid grid-cols-3 gap-4">
+<div class="mt-4 grid gap-4 sm:grid-cols-3">
   <div class="rounded-xl border bg-card p-4">
     <div class="text-xs text-muted-foreground">Отдано всего</div>
     <div class="mt-1 text-xl font-semibold">{summary ? fmtBytes(summary.total_up) : '—'}</div>
@@ -133,7 +133,7 @@
 </div>
 
 <!-- Xray status + online devices -->
-<div class="mt-4 grid grid-cols-2 gap-4">
+<div class="mt-4 grid gap-4 lg:grid-cols-2">
   <div class="rounded-xl border bg-card p-4">
     <h2 class="font-medium">xray</h2>
     {#if xray}
