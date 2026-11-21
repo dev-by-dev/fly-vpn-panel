@@ -43,6 +43,7 @@ type userResponse struct {
 	CreatedAt      time.Time `json:"created_at"`
 	UsedBytes      int64     `json:"used_bytes"`
 	OnlineCount    int       `json:"online_count"`
+	LastSeen       time.Time `json:"last_seen"`
 }
 
 type createRequest struct {
@@ -136,7 +137,12 @@ func (h *Handlers) enrich(u *store.User, now time.Time) (userResponse, error) {
 	}
 	cutoff := now.Add(-2 * h.PollInterval)
 	online := 0
+	// Последняя активность: самый свежий визит среди устройств юзера.
+	var lastSeen time.Time
 	for _, d := range devices {
+		if d.LastSeen.After(lastSeen) {
+			lastSeen = d.LastSeen
+		}
 		if !d.LastSeen.Before(cutoff) {
 			online++
 		}
@@ -146,7 +152,7 @@ func (h *Handlers) enrich(u *store.User, now time.Time) (userResponse, error) {
 		Expiry: u.Expiry, QuotaBytes: u.QuotaBytes, QuotaPeriod: u.QuotaPeriod,
 		QuotaResetAt: u.QuotaResetAt, DeviceLimit: u.DeviceLimit, Disabled: u.Disabled,
 		DisabledReason: u.DisabledReason, CreatedAt: u.CreatedAt,
-		UsedBytes: up + down, OnlineCount: online,
+		UsedBytes: up + down, OnlineCount: online, LastSeen: lastSeen,
 	}, nil
 }
 

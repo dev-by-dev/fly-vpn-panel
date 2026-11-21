@@ -15,6 +15,7 @@
     disabled_reason: string;
     used_bytes: number;
     online_count: number;
+    last_seen: string;
   };
 
   let users = $state<UserRow[]>([]);
@@ -59,6 +60,19 @@
   function pct(u: UserRow): number {
     if (u.quota_bytes <= 0) return 0;
     return Math.min(100, Math.round((u.used_bytes / u.quota_bytes) * 100));
+  }
+
+  // Относительное «сколько назад» для подписи под ником.
+  function fmtAgo(iso: string): string {
+    const t = Date.parse(iso);
+    if (!t) return 'никогда';
+    const s = Math.max(0, Math.round((Date.now() - t) / 1000));
+    if (s < 60) return 'несколько секунд назад';
+    const m = Math.round(s / 60);
+    if (m < 60) return `${m} мин назад`;
+    const h = Math.round(m / 60);
+    if (h < 24) return `${h} ч назад`;
+    return `${Math.round(h / 24)} дн назад`;
   }
 
   function fmtDate(iso: string): string {
@@ -205,9 +219,16 @@
           <td class="px-3 py-2">
             <div class="flex items-center gap-2">
               <span
-                class="h-2.5 w-2.5 shrink-0 rounded-full {u.disabled ? 'bg-red-400' : 'bg-emerald-400'}"
+                class="h-2.5 w-2.5 shrink-0 rounded-full {u.online_count > 0
+                  ? 'bg-emerald-400'
+                  : 'bg-red-400'}"
               ></span>
-              <span class="font-medium">{u.username}</span>
+              <div class="min-w-0">
+                <div class="font-medium">{u.username}</div>
+                <div class="text-xs uppercase tracking-wide text-muted-foreground">
+                  {fmtAgo(u.last_seen)}
+                </div>
+              </div>
             </div>
           </td>
           <td class="px-3 py-2 text-muted-foreground">{u.id}</td>
