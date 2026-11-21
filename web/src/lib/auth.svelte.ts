@@ -1,4 +1,4 @@
-import { loginRequest, logoutRequest } from './api';
+import { apiFetch, loginRequest, logoutRequest } from './api';
 
 // Runes store (Svelte 5): reassign fields, or reassign via $state mutation.
 export const authState = $state({
@@ -6,10 +6,11 @@ export const authState = $state({
   need2fa: false,
 });
 
-// Session probe: GET /api/settings → 200 = logged in, 401 = not.
+// Session probe: GET /api/settings via apiFetch so an expired access token
+// is refreshed (15м access + 7д refresh design); hard failure → login screen.
 export async function checkSession(): Promise<boolean> {
   try {
-    const res = await fetch('/api/settings', { credentials: 'include' });
+    const res = await apiFetch('/api/settings');
     authState.loggedIn = res.ok;
   } catch {
     authState.loggedIn = false;

@@ -24,10 +24,10 @@ function authLost(): void {
 /**
  * Authenticated fetch: credentials included, JSON bodies.
  * On 401 → ONE refresh request → retry original ONCE → else redirect to login.
- * Auth endpoints themselves never trigger refresh (login 401 = 2fa_required or bad creds).
+ * Only the refresh endpoint itself skips the chain (never refresh via refresh).
  */
 export async function apiFetch(path: string, opts: RequestInit = {}): Promise<Response> {
-  if (path.startsWith('/api/auth/')) {
+  if (path === REFRESH_PATH) {
     return fetch(path, jsonInit(opts));
   }
   const init = jsonInit(opts);
@@ -52,7 +52,9 @@ export async function apiFetch(path: string, opts: RequestInit = {}): Promise<Re
   return res;
 }
 
-// Auth endpoints (raw fetch: no refresh chain).
+// Login/logout use raw fetch above (401 there = 2fa_required or bad creds, never refresh).
+
+// JWT-protected account endpoints (go through apiFetch refresh chain).
 
 export function loginRequest(
   username: string,
