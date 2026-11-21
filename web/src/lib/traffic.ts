@@ -31,3 +31,12 @@ export function fmtBytes(n: number): string {
   const v = (n / 1024 ** i).toFixed(i === 0 ? 0 : 1).replace(/\.0$/, '');
   return `${v} ${units[i]}`;
 }
+
+// Bits per second → human bit rate (сеть принято мерить в битах).
+export function fmtRate(bps: number): string {
+  if (!(bps > 0)) return '0 бит/с';
+  if (bps < 1e3) return `${Math.round(bps)} бит/с`;
+  const units = ['Кбит/с', 'Мбит/с', 'Гбит/с'];
+  const i = Math.min(units.length - 1, Math.floor(Math.log(bps) / Math.log(1000)) - 1);
+  return `${(bps / 1000 ** (i + 1)).toFixed(1).replace(/\.0$/, '')} ${units[i]}`;
+}

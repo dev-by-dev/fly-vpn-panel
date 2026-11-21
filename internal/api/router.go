@@ -117,6 +117,7 @@ func NewRouter(d Deps) http.Handler {
 	p.HandleFunc("POST /api/xray/stop", apiH.XrayStop)
 	p.HandleFunc("POST /api/xray/restart", apiH.XrayRestart)
 	p.HandleFunc("GET /api/stats/traffic", apiH.StatsTraffic)
+	p.HandleFunc("GET /api/stats/live", apiH.StatsLive)
 	p.HandleFunc("GET /api/stats/online", apiH.StatsOnline)
 	p.HandleFunc("GET /api/stats/summary", apiH.StatsSummary)
 	p.HandleFunc("GET /api/system", apiH.System)

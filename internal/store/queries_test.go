@@ -267,6 +267,37 @@ func TestSamplesSince(t *testing.T) {
 	}
 }
 
+func TestSamplesSeries(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("Open(): %v", err)
+	}
+	defer s.Close()
+
+	base := time.Date(2026, 11, 21, 12, 0, 0, 0, time.UTC)
+	// Same ts twice: two users sampled in one tick must collapse into one bucket.
+	if err := s.SampleInsert("alice", base, 10, 20); err != nil {
+		t.Fatalf("SampleInsert(alice): %v", err)
+	}
+	if err := s.SampleInsert("bob", base, 1, 2); err != nil {
+		t.Fatalf("SampleInsert(bob): %v", err)
+	}
+	if err := s.SampleInsert("alice", base.Add(-time.Hour), 999, 999); err != nil {
+		t.Fatalf("SampleInsert(old): %v", err)
+	}
+
+	bs, err := s.SamplesSeries(base.Add(-time.Minute))
+	if err != nil {
+		t.Fatalf("SamplesSeries(): %v", err)
+	}
+	if len(bs) != 1 {
+		t.Fatalf("SamplesSeries() len = %d; want 1", len(bs))
+	}
+	if bs[0].Up != 11 || bs[0].Down != 22 || !bs[0].TS.Equal(base) {
+		t.Errorf("SamplesSeries()[0] = %+v; want ts %v, up 11, down 22", bs[0], base)
+	}
+}
+
 func TestTrafficSeries(t *testing.T) {
 	s, err := Open(t.TempDir())
 	if err != nil {

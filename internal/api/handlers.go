@@ -164,6 +164,30 @@ func (h *Handlers) StatsTraffic(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, buckets)
 }
 
+// StatsLive serves GET /api/stats/live?minutes=15: raw per-tick
+// samples (bytes per poll interval) summed across users, for the
+// real-time chart window. interval_sec lets the UI show bits per second.
+func (h *Handlers) StatsLive(w http.ResponseWriter, r *http.Request) {
+	minutes := 15
+	if v := r.URL.Query().Get("minutes"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > 120 {
+			jsonError(w, http.StatusBadRequest, "bad_minutes")
+			return
+		}
+		minutes = n
+	}
+	buckets, err := h.Store.SamplesSeries(time.Now().UTC().Add(-time.Duration(minutes) * time.Minute))
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "internal")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"interval_sec": int(h.currentInterval().Seconds()),
+		"buckets":      buckets,
+	})
+}
+
 // StatsOnline serves GET /api/stats/online: devices seen within the
 // last two poll intervals.
 func (h *Handlers) StatsOnline(w http.ResponseWriter, r *http.Request) {

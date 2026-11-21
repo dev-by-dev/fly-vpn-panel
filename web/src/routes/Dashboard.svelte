@@ -3,7 +3,7 @@
   import { apiFetch } from '$lib/api';
   import { Button } from '$lib/components/ui/button';
   import TrafficChart from '$lib/components/TrafficChart.svelte';
-  import { fmtBytes, fmtUptime, type Bucket } from '$lib/traffic';
+  import { fmtBytes, fmtRate, fmtUptime, type Bucket } from '$lib/traffic';
 
   type Device = { Username: string; IP: string; FirstSeen: string; LastSeen: string };
   // xray Status has no json tags → Go field names capitalized; Uptime = ns.
@@ -23,6 +23,10 @@
   let user = $state('');
   let users = $state<{ username: string }[]>([]);
   let buckets = $state<Bucket[]>([]);
+  // Режим реального времени: сырые сэмплы поллера (байты за интервал), опрос каждые 5 с.
+  let live = $state(false);
+  let liveBuckets = $state<Bucket[]>([]);
+  let liveInterval = $state(30);
   let devices = $state<Device[]>([]);
   let xray = $state<XrayStatus | null>(null);
   let summary = $state<Summary | null>(null);
@@ -42,6 +46,40 @@
       error = 'Сеть недоступна';
     }
   }
+
+  // Реальное время: пока тогл включён, тянем последние 15 минут сэмплов каждые 5 с.
+  $effect(() => {
+    if (!live) return;
+    let dead = false;
+    const load = async () => {
+      try {
+        const res = await apiFetch('/api/stats/live?minutes=15');
+        if (dead || !res.ok) return;
+        const data = (await res.json()) as { interval_sec: number; buckets: Bucket[] };
+        liveInterval = data.interval_sec > 0 ? data.interval_sec : 30;
+        liveBuckets = data.buckets ?? [];
+      } catch {
+        if (!dead) error = 'Сеть недоступна';
+      }
+    };
+    void load();
+    const timer = setInterval(load, 5000);
+    return () => {
+      dead = true;
+      clearInterval(timer);
+    };
+  });
+
+  // Байты за интервал → бит/с для отображения скорости.
+  const liveBps = $derived(
+    liveBuckets.map((b) => ({
+      TS: b.TS,
+      Up: (b.Up * 8) / liveInterval,
+      Down: (b.Down * 8) / liveInterval,
+    })),
+  );
+  const shownBuckets = $derived(live ? liveBps : buckets);
+  const liveLast = $derived(liveBps.length ? liveBps[liveBps.length - 1] : null);
 
   async function loadRest() {
     try {
@@ -179,8 +217,9 @@
       {#each [['day', 'День'], ['week', 'Неделя'], ['month', 'Месяц']] as [r, label] (r)}
         <Button
           size="xs"
-          variant={range === r ? 'default' : 'outline'}
+          variant={!live && range === r ? 'default' : 'outline'}
           onclick={() => {
+            live = false;
             range = r as typeof range;
             loadTraffic();
           }}>{label}</Button
@@ -191,6 +230,7 @@
       class="h-8 rounded-md border bg-background px-2 text-sm"
       value={user}
       onchange={(e) => {
+        live = false;
         user = e.currentTarget.value;
         loadTraffic();
       }}
@@ -200,8 +240,21 @@
         <option value={u.username}>{u.username}</option>
       {/each}
     </select>
+
+    <label class="ml-auto flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+      <input type="checkbox" bind:checked={live} class="peer sr-only" />
+      <span
+        class="relative h-5 w-9 rounded-full bg-muted transition-colors after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-background after:transition-transform peer-checked:bg-primary peer-checked:after:translate-x-4"
+      ></span>
+      В реальном времени
+    </label>
+    {#if live && liveLast}
+      <span class="text-sm text-muted-foreground">
+        ↓ Входящий {fmtRate(liveLast.Down)} · ↑ Исходящий {fmtRate(liveLast.Up)}
+      </span>
+    {/if}
   </div>
-  <TrafficChart {buckets} height={260} />
+  <TrafficChart buckets={shownBuckets} rate={live} height={260} />
 </div>
 
 <!-- Xray status + online devices -->
