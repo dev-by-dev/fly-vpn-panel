@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import Router from 'svelte-spa-router';
+  import Router, { router, replace } from 'svelte-spa-router';
   import active from 'svelte-spa-router/active';
   import { authState, checkSession, logout } from '$lib/auth.svelte';
   import { Button } from '$lib/components/ui/button';
@@ -35,6 +35,11 @@
   ];
 
   onMount(checkSession);
+
+  // Залогиненный на /login видел карточку входа внутри рабочего лэйаута.
+  $effect(() => {
+    if (authState.loggedIn && router.location === '/login') void replace('/');
+  });
 </script>
 
 {#if !authState.loggedIn}
@@ -46,7 +51,7 @@
     <header class="border-b bg-card">
       <div class="flex items-center gap-4 px-4">
         <div class="shrink-0 py-4 text-lg font-semibold">flypanel</div>
-        <nav class="flex flex-1 items-center gap-1 overflow-x-auto">
+        <nav class="flex flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden">
           {#each nav as item (item.href)}
             <a
               href={item.href}
