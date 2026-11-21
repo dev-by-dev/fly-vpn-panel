@@ -97,15 +97,21 @@ func serveCommand() {
 	go poller.Run(ctx)
 	go stats.RunBackup(ctx, st, cfg.DataDir)
 
-	srv := &http.Server{Addr: cfg.ListenAddr, Handler: api.NewRouter(api.Deps{
-		Store:   st,
-		JWT:     auth.NewJWT(key),
-		RL:      auth.NewRateLimiter(5, time.Minute),
-		Client:  xc,
-		Manager: mgr,
-		Cfg:     cfg,
-		Poller:  poller,
-	})}
+	srv := &http.Server{
+		Addr: cfg.ListenAddr,
+		Handler: api.NewRouter(api.Deps{
+			Store:   st,
+			JWT:     auth.NewJWT(key),
+			RL:      auth.NewRateLimiter(5, time.Minute),
+			Client:  xc,
+			Manager: mgr,
+			Cfg:     cfg,
+			Poller:  poller,
+		}),
+		// Bound header reads so slow/idle connections cannot pin
+		// goroutines forever (slowloris).
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 
 	errCh := make(chan error, 1)
 	go func() {

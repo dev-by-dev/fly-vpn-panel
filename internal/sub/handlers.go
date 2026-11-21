@@ -54,18 +54,25 @@ func (h *Handlers) Sub(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now().UTC()
-	if !u.Expiry.After(now) {
-		if !(u.Disabled && u.DisabledReason == "expired") {
-			if err := h.Store.UserSetDisabled(u.ID, true, "expired"); err != nil {
-				jsonError(w, http.StatusInternalServerError, "internal")
-				return
-			}
+	if u.Disabled {
+		// A disabled user is never re-tagged here: overwriting the
+		// reason (e.g. manual → expired) would let the poller
+		// auto-enable a manually disabled user once the expiry is
+		// extended. Only an "expired"-tagged user keeps the expired
+		// response so clients still see why they were cut off.
+		if u.DisabledReason == "expired" {
+			jsonError(w, http.StatusForbidden, "expired")
+			return
 		}
-		jsonError(w, http.StatusForbidden, "expired")
+		jsonError(w, http.StatusForbidden, "disabled")
 		return
 	}
-	if u.Disabled {
-		jsonError(w, http.StatusForbidden, "disabled")
+	if !u.Expiry.After(now) {
+		if err := h.Store.UserSetDisabled(u.ID, true, "expired"); err != nil {
+			jsonError(w, http.StatusInternalServerError, "internal")
+			return
+		}
+		jsonError(w, http.StatusForbidden, "expired")
 		return
 	}
 	format := r.PathValue("format")

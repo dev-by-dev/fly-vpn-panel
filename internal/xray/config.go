@@ -133,7 +133,9 @@ func ensureAPIRule(routing map[string]any) {
 }
 
 // parseRouting decodes routingJSON, substituting the default for an empty
-// string and failing on invalid JSON.
+// string, failing on invalid JSON and rejecting non-object values —
+// JSON null unmarshals into a nil map with a nil error, and
+// ensureAPIRule would assign into that nil map and panic.
 func parseRouting(routingJSON string) (map[string]any, error) {
 	if routingJSON == "" {
 		routingJSON = defaultRouting
@@ -141,6 +143,9 @@ func parseRouting(routingJSON string) (map[string]any, error) {
 	var routing map[string]any
 	if err := json.Unmarshal([]byte(routingJSON), &routing); err != nil {
 		return nil, fmt.Errorf("routing: %w", err)
+	}
+	if routing == nil {
+		return nil, fmt.Errorf("routing: must be a JSON object")
 	}
 	return routing, nil
 }

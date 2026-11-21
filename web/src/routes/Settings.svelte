@@ -32,8 +32,11 @@
     try {
       const res = await apiFetch('/api/settings');
       if (res.ok) {
-        const data = (await res.json()) as { poll_interval_sec: number };
+        const data = (await res.json()) as { poll_interval_sec: number; totp_enabled?: boolean };
         interval = String(data.poll_interval_sec);
+        // 2FA state comes from the server, not session-local memory,
+        // so a reload shows the real enabled state.
+        enabled = data.totp_enabled === true;
       }
     } catch {
       // не критично: останется значение по умолчанию

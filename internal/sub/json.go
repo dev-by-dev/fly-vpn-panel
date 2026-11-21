@@ -27,20 +27,23 @@ func RenderJSON(inbounds []store.Inbound, u store.User, entryIP, templateJSON st
 			return nil, err
 		}
 		out := templateJSON
-		for k, v := range map[string]string{
-			"UUID":    u.UUID,
-			"ADDRESS": entryIP,
-			"PORT":    strconv.Itoa(p.Port),
-			"PBK":     p.PBK,
-			"SID":     p.SID,
-			"SNI":     p.SNI,
-			"FP":      p.FP,
-			"PATH":    p.Path,
-			"MODE":    p.Mode,
-			"TAG":     p.Tag,
-		} {
-			out = strings.ReplaceAll(out, "{{"+k+"}}", v)
-		}
+		// Single-pass replacer: substituted values are never re-scanned,
+		// so a value containing {{KEY}} stays verbatim (and trips the
+		// leftover-placeholder check below) instead of being
+		// re-substituted with that key's value.
+		repl := strings.NewReplacer(
+			"{{UUID}}", u.UUID,
+			"{{ADDRESS}}", entryIP,
+			"{{PORT}}", strconv.Itoa(p.Port),
+			"{{PBK}}", p.PBK,
+			"{{SID}}", p.SID,
+			"{{SNI}}", p.SNI,
+			"{{FP}}", p.FP,
+			"{{PATH}}", p.Path,
+			"{{MODE}}", p.Mode,
+			"{{TAG}}", p.Tag,
+		)
+		out = repl.Replace(out)
 		if strings.Contains(out, "{{") {
 			return nil, fmt.Errorf("rendered config %q: unresolved placeholder", p.Tag)
 		}

@@ -312,6 +312,57 @@ func TestPrune(t *testing.T) {
 	}
 }
 
+// hookStats wraps fakeStats and runs a one-shot hook inside the first
+// QueryUserStats call — simulating a concurrent admin PATCH landing
+// mid-tick, after the tick-start user snapshot was taken.
+type hookStats struct {
+	fakeStats
+	hook func()
+}
+
+func (h *hookStats) QueryUserStats(email string) (int64, int64, error) {
+	if h.hook != nil {
+		hook := h.hook
+		h.hook = nil
+		hook()
+	}
+	return h.fakeStats.QueryUserStats(email)
+}
+
+// TestRolloverPreservesConcurrentPatch: the rollover must write only
+// quota_reset_at (targeted update). A full-row UserUpdate from the
+// tick-start snapshot clobbers concurrent admin PATCHes, because the
+// per-user RPC steps take seconds.
+func TestRolloverPreservesConcurrentPatch(t *testing.T) {
+	st := openStore(t)
+	past := time.Now().Add(-48 * time.Hour)
+	mkUser(t, st, "iris@example.com", func(u *store.User) {
+		u.QuotaPeriod = "day"
+		u.QuotaResetAt = past
+		u.QuotaBytes = 100
+	})
+
+	fs := &hookStats{fakeStats: fakeStats{}}
+	fs.hook = func() {
+		// Admin PATCH racing the poll tick: quota raised mid-tick.
+		if _, err := st.DB().Exec(
+			`UPDATE users SET quota_bytes = 999 WHERE username = ?`, "iris@example.com"); err != nil {
+			t.Errorf("concurrent patch: %v", err)
+		}
+	}
+	p := NewPoller(st, fs, newFakeSync(), 30*time.Second)
+
+	p.tick(context.Background())
+
+	u := mustUser(t, st, "iris@example.com")
+	if u.QuotaBytes != 999 {
+		t.Fatalf("quota_bytes after rollover = %d, want 999 (concurrent PATCH must survive)", u.QuotaBytes)
+	}
+	if want := users.NextBoundary(past, "day"); !u.QuotaResetAt.Equal(want) {
+		t.Fatalf("quota_reset_at = %v, want %v", u.QuotaResetAt, want)
+	}
+}
+
 func TestTrafficBuckets(t *testing.T) {
 	st := openStore(t)
 	mkUser(t, st, "erin@example.com", nil)
@@ -396,7 +447,7 @@ func TestSummary(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	up, down, online, err := Summary(st)
+	up, down, online, err := Summary(st, 30*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -405,6 +456,35 @@ func TestSummary(t *testing.T) {
 	}
 	if online != 1 {
 		t.Fatalf("online = %d, want 1 (distinct usernames)", online)
+	}
+}
+
+// TestSummaryInterval: the online window follows 2× the live poll
+// interval, not a hard-coded 60s — a 150s interval must count a device
+// seen 3 minutes ago as online.
+func TestSummaryInterval(t *testing.T) {
+	st := openStore(t)
+	mkUser(t, st, "hana@example.com", nil)
+	now := time.Now().UTC()
+	if err := st.DeviceUpsert("hana@example.com", "203.0.113.40", now.Add(-3*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+
+	// 150s interval → 300s window: the 3-minute-old sighting is online.
+	_, _, online, err := Summary(st, 150*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if online != 1 {
+		t.Fatalf("online(150s interval) = %d, want 1 (within the 2×150s window)", online)
+	}
+	// Short interval → narrow window: the same sighting is offline.
+	_, _, online, err = Summary(st, 30*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if online != 0 {
+		t.Fatalf("online(30s interval) = %d, want 0 (outside the 60s window)", online)
 	}
 }
 

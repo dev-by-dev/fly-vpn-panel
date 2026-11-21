@@ -130,6 +130,9 @@ func TestUserCreateValidation(t *testing.T) {
 		{"invalid expiry", `{"username":"bob","expiry":"not-a-time"}`},
 		{"invalid quota period", `{"username":"bob","expiry":"2027-06-01T00:00:00Z","quota_period":"hour"}`},
 		{"negative device limit", `{"username":"bob","expiry":"2027-06-01T00:00:00Z","device_limit":-1}`},
+		{"bad username charset arrows", `{"username":"bad>>>name","expiry":"2027-06-01T00:00:00Z"}`},
+		{"bad username charset space", `{"username":"user name","expiry":"2027-06-01T00:00:00Z"}`},
+		{"bad username charset cyrillic", `{"username":"юзер","expiry":"2027-06-01T00:00:00Z"}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -139,6 +142,44 @@ func TestUserCreateValidation(t *testing.T) {
 				t.Fatalf("status = %d, want 400, body %s", rec.Code, rec.Body.String())
 			}
 		})
+	}
+}
+
+// TestUserCreateUsernameCharset: usernames are the xray stats key; only
+// [A-Za-z0-9._@-] survives OnlineUsers extraction, so anything else is
+// rejected at the boundary.
+func TestUserCreateUsernameCharset(t *testing.T) {
+	_, srv := newTestServer(t, &fakeClient{})
+
+	// Charset edge cases that MUST be accepted.
+	for _, name := range []string{"alice", "user-1_x.y", "user@example.com", "A0.-_@"} {
+		rec := doJSON(t, srv, "POST", "/api/users",
+			`{"username":"`+name+`","expiry":"2027-06-01T00:00:00Z"}`)
+		if rec.Code != http.StatusCreated {
+			t.Errorf("username %q: status = %d, want 201, body %s", name, rec.Code, rec.Body.String())
+		}
+	}
+
+	// Anything outside the charset is rejected with invalid_username.
+	for _, name := range []string{"bad>>>name", "user name", "юзер", "semi;colon", "quo\"te"} {
+		b, err := json.Marshal(map[string]string{"username": name, "expiry": "2027-06-01T00:00:00Z"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rec := doJSON(t, srv, "POST", "/api/users", string(b))
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("username %q: status = %d, want 400, body %s", name, rec.Code, rec.Body.String())
+			continue
+		}
+		var e struct {
+			Error string `json:"error"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &e); err != nil {
+			t.Fatal(err)
+		}
+		if e.Error != "invalid_username" {
+			t.Errorf("username %q: error = %q, want invalid_username", name, e.Error)
+		}
 	}
 }
 

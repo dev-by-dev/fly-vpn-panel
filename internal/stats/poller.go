@@ -230,13 +230,14 @@ func (p *Poller) tick(ctx context.Context) {
 }
 
 // apply persists one Decide action and mirrors it in xray membership.
-// Decide emits rollover before disable/enable, so the UserUpdate in the
-// rollover branch never rewrites a disable applied earlier.
+// Decide emits rollover before disable/enable, and the rollover branch
+// writes only quota_reset_at (targeted update), so it never rewrites a
+// disable applied earlier or a concurrent admin PATCH.
 func (p *Poller) apply(u *store.User, a users.Action, inbounds []store.Inbound) error {
 	switch a.Type {
 	case "rollover":
 		u.QuotaResetAt = users.NextBoundary(u.QuotaResetAt, u.QuotaPeriod)
-		return p.st.UserUpdate(u)
+		return p.st.UserSetQuotaResetAt(u.ID, u.QuotaResetAt)
 	case "disable":
 		if err := p.st.UserSetDisabled(u.ID, true, a.Reason); err != nil {
 			return err
@@ -350,11 +351,10 @@ func Traffic(st *store.Store, username, rng string) ([]store.Bucket, error) {
 }
 
 // Summary returns lifetime traffic totals and the online user count.
-// Online = a device sighting within 60s, i.e. 2× the 30s default poll
-// interval; the interval is not passed in, so a sensible default is
-// fixed here. shortcut: hard-coded 60s window, upgrade when Task 10
-// wires the live interval into the summary call.
-func Summary(st *store.Store) (totalUp, totalDown int64, onlineCount int, err error) {
+// Online = a device sighting within 2×interval (two poll intervals),
+// the same window /api/stats/online uses; the caller passes the live
+// poll interval so a longer interval does not undercount.
+func Summary(st *store.Store, interval time.Duration) (totalUp, totalDown int64, onlineCount int, err error) {
 	userList, err := st.UserList()
 	if err != nil {
 		return 0, 0, 0, err
@@ -367,7 +367,7 @@ func Summary(st *store.Store) (totalUp, totalDown int64, onlineCount int, err er
 		totalUp += up
 		totalDown += down
 	}
-	devices, err := st.DevicesOnline(time.Now().UTC().Add(-60 * time.Second))
+	devices, err := st.DevicesOnline(time.Now().UTC().Add(-2 * interval))
 	if err != nil {
 		return 0, 0, 0, err
 	}

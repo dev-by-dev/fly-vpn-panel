@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 )
 
 const userCols = `id, username, uuid, sub_token, expiry, quota_bytes, quota_period,
@@ -132,6 +133,24 @@ func (s *Store) UserDelete(id int64) error {
 	}
 	if n, err := res.RowsAffected(); err != nil {
 		return fmt.Errorf("user delete: rows affected: %w", err)
+	} else if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// UserSetQuotaResetAt moves only the quota window start (rollover).
+// A full-row UserUpdate from a tick-start snapshot would clobber
+// concurrent admin PATCHes; this targeted write leaves every other
+// column untouched.
+func (s *Store) UserSetQuotaResetAt(id int64, resetAt time.Time) error {
+	res, err := s.DB().Exec(
+		`UPDATE users SET quota_reset_at = ? WHERE id = ?`, fmtTime(resetAt), id)
+	if err != nil {
+		return fmt.Errorf("user set quota reset at: %w", err)
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return fmt.Errorf("user set quota reset at: rows affected: %w", err)
 	} else if n == 0 {
 		return ErrNotFound
 	}

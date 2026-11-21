@@ -64,6 +64,24 @@ type patchRequest struct {
 
 var validPeriods = map[string]bool{"none": true, "day": true, "week": true, "month": true}
 
+// validUsername: usernames are the per-user key in xray's stats service
+// (OnlineUsers/QueryUserStats); anything outside [A-Za-z0-9._@-] breaks
+// counter extraction, so it is rejected at the boundary.
+func validUsername(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '.' || r == '_' || r == '@' || r == '-':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 const (
 	tokenAlphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 	tokenLen      = 16
@@ -203,6 +221,10 @@ func (h *Handlers) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Username == "" {
 		jsonError(w, http.StatusBadRequest, "username_required")
+		return
+	}
+	if !validUsername(req.Username) {
+		jsonError(w, http.StatusBadRequest, "invalid_username")
 		return
 	}
 	if req.QuotaPeriod == "" {

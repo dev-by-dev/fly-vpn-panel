@@ -28,7 +28,9 @@
   let quotaGB = $state(user ? Number((user.quota_bytes / GB).toFixed(3)) : 0);
   let period = $state(user?.quota_period ?? 'none');
   let devices = $state(user?.device_limit ?? 0);
-  let manualOff = $state(user?.disabled && user.disabled_reason === 'manual');
+  // Чекбокс «Отключить вручную»: true только для manual-отключения.
+  const manualOff0 = user?.disabled && user.disabled_reason === 'manual';
+  let manualOff = $state(manualOff0);
   let error = $state('');
   let saving = $state(false);
 
@@ -60,7 +62,9 @@
       device_limit: devices,
     };
     if (!isEdit) body.username = username.trim();
-    else body.disabled = manualOff; // username иммутабелен, не отправляем
+    // disabled шлём только если чекбокс меняли: иначе правка чужого поля
+    // ре-включит юзера, отключённого квотой/экспирацией.
+    else if (manualOff !== manualOff0) body.disabled = manualOff;
     saving = true;
     try {
       const res = await apiFetch(isEdit ? `/api/users/${user!.id}` : '/api/users', {
