@@ -84,8 +84,8 @@ func TestManagerStartStop(t *testing.T) {
 	if !st.Running || st.PID <= 0 {
 		t.Fatalf("Status() after Start = %+v, want running with a PID", st)
 	}
-	if st.Version != fakeVersionLine {
-		t.Errorf("Version = %q, want %q", st.Version, fakeVersionLine)
+	if st.Version != "25.11.20" {
+		t.Errorf("Version = %q, want %q", st.Version, "25.11.20")
 	}
 	if st.Uptime < 0 {
 		t.Errorf("Uptime = %v, want >= 0", st.Uptime)
@@ -168,5 +168,18 @@ func TestApplyAtomicFailureKeepsOld(t *testing.T) {
 	}
 	if string(got) != "new config" {
 		t.Errorf("file content after apply = %q, want %q", got, "new config")
+	}
+}
+
+func TestParseVersion(t *testing.T) {
+	cases := map[string]string{
+		"Xray 26.11.9 (Xray, Penetrates Everything.) 676eaf6 (go1.27.3 linux/amd64)": "26.11.9",
+		"Xray 25.11.20 (flypanel test fake)":                                         "25.11.20",
+		"xray stub":                                                                  "xray stub",
+	}
+	for in, want := range cases {
+		if got := parseVersion(in); got != want {
+			t.Errorf("parseVersion(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

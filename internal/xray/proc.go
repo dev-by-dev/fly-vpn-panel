@@ -3,6 +3,7 @@ package xray
 import (
 	"fmt"
 	"os/exec"
+	"regexp"
 	"strings"
 	"sync"
 	"syscall"
@@ -42,6 +43,18 @@ func NewManager(binPath, cfgPath string) *Manager {
 	return &Manager{binPath: binPath, cfgPath: cfgPath}
 }
 
+// versionRe вытаскивает номер из первой строки `xray version`, вида
+// «Xray 26.11.9 (Xray, Penetrates Everything.) …»: остальное — шум для UI.
+var versionRe = regexp.MustCompile(`\d+\.\d+\.\d+`)
+
+func parseVersion(out string) string {
+	line, _, _ := strings.Cut(out, "\n")
+	if v := versionRe.FindString(line); v != "" {
+		return v
+	}
+	return strings.TrimSpace(line)
+}
+
 // Start launches xray, captures its version, and begins supervising it.
 // It is a no-op if xray is already running or a crash restart is pending.
 func (m *Manager) Start() error {
@@ -52,8 +65,7 @@ func (m *Manager) Start() error {
 	}
 	m.version = ""
 	if out, err := exec.Command(m.binPath, "version").Output(); err == nil {
-		line, _, _ := strings.Cut(string(out), "\n")
-		m.version = strings.TrimSpace(line)
+		m.version = parseVersion(string(out))
 	}
 	cmd := exec.Command(m.binPath, "run", "-c", m.cfgPath)
 	if err := cmd.Start(); err != nil {
