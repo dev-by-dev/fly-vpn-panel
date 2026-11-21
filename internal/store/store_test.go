@@ -25,8 +25,8 @@ func TestOpenMigrates(t *testing.T) {
 	}
 	defer s.Close()
 
-	if got := schemaVersion(t, s); got != 4 {
-		t.Errorf("schema version = %d, want 4", got)
+	if got := schemaVersion(t, s); got != 5 {
+		t.Errorf("schema version = %d, want 5", got)
 	}
 	for _, table := range allTables {
 		var name string
@@ -56,8 +56,8 @@ func TestOpenIdempotent(t *testing.T) {
 	}
 	defer s2.Close()
 
-	if got := schemaVersion(t, s2); got != 4 {
-		t.Errorf("schema version after reopen = %d, want 4", got)
+	if got := schemaVersion(t, s2); got != 5 {
+		t.Errorf("schema version after reopen = %d, want 5", got)
 	}
 }
 

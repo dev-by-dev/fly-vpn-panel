@@ -25,10 +25,25 @@ func (s *Store) DeviceUpsert(username, ip string, meta DeviceMeta, now time.Time
 	// xray знает только IP: обновляем last_seen у всех устройств этого IP,
 	// включая строки с HWID, иначе они «стареют» и висят оффлайн.
 	if meta.HWID == "" {
-		// xray знает только IP: обновляем last_seen всем устройствам этого
-		// IP, включая строки с HWID. Пустых строк не создаём — иначе в
-		// списке появляются «устройства» без платформы и клиента.
-		_, err := s.DB().Exec(`UPDATE devices SET last_seen = ? WHERE username = ? AND ip = ?`, ts, username, ip)
+		if meta.UserAgent == "" {
+			// Поллер знает только IP: обновляем last_seen всем строкам юзера с этим IP.
+			_, err := s.DB().Exec(`UPDATE devices SET last_seen = ? WHERE username = ? AND ip = ?`, ts, username, ip)
+			if err != nil {
+				return fmt.Errorf("device upsert: %w", err)
+			}
+			return nil
+		}
+		// Клиент без HWID: ключ устройства — IP + User-Agent.
+		res, err := s.DB().Exec(`UPDATE devices SET last_seen = ? WHERE username = ? AND ip = ? AND user_agent = ? AND hwid = ''`, ts, username, ip, meta.UserAgent)
+		if err != nil {
+			return fmt.Errorf("device upsert: %w", err)
+		}
+		if n, err := res.RowsAffected(); err != nil {
+			return fmt.Errorf("device upsert: rows affected: %w", err)
+		} else if n > 0 {
+			return nil
+		}
+		_, err = s.DB().Exec(`INSERT INTO devices (username, ip, first_seen, last_seen, platform, os_version, model, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, username, ip, ts, ts, meta.Platform, meta.OSVersion, meta.Model, meta.UserAgent)
 		if err != nil {
 			return fmt.Errorf("device upsert: %w", err)
 		}
