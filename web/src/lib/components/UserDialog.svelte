@@ -86,54 +86,113 @@
 </script>
 
 <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true">
-  <div class="w-full max-w-md rounded-xl border bg-card p-5 shadow-lg">
-    <h2 class="text-lg font-semibold">{isEdit ? 'Изменить пользователя' : 'Новый пользователь'}</h2>
-    <form class="mt-4 grid gap-4" onsubmit={submit}>
-      <div class="grid gap-1.5">
-        <Label for="u-name">Имя</Label>
-        <Input id="u-name" bind:value={username} disabled={isEdit} placeholder="ivan" />
-        {#if isEdit}
-          <p class="text-xs text-muted-foreground">Имя изменить нельзя (ключ статистики)</p>
-        {/if}
+  <div class="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl border bg-card shadow-lg">
+    <div class="flex items-center justify-between border-b px-5 py-4">
+      <h2 class="text-lg font-semibold">{isEdit ? 'Изменить пользователя' : 'Создать пользователя'}</h2>
+      <button class="text-muted-foreground hover:text-foreground" onclick={onclose} aria-label="Закрыть">
+        ✕
+      </button>
+    </div>
+    <form onsubmit={submit}>
+      <div class="grid gap-4 p-5 md:grid-cols-2">
+        <!-- левая колонка -->
+        <div class="space-y-4">
+          <section class="rounded-xl border p-4">
+            <div class="flex items-center gap-2 border-b pb-3">
+              <span class="grid h-9 w-9 place-items-center rounded-lg bg-sky-500/10 text-sky-400">
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
+                </svg>
+              </span>
+              <h3 class="font-medium">Данные пользователя</h3>
+            </div>
+            <div class="mt-3 grid gap-1.5">
+              <Label for="u-name">Юзернейм</Label>
+              <Input id="u-name" bind:value={username} disabled={isEdit} placeholder="ivan" />
+              <p class="text-xs text-muted-foreground">
+                {isEdit ? 'Имя изменить нельзя (ключ статистики)' : 'Юзернейм потом не изменить'}
+              </p>
+            </div>
+          </section>
+
+          <section class="rounded-xl border p-4">
+            <div class="flex items-center gap-2 border-b pb-3">
+              <span class="grid h-9 w-9 place-items-center rounded-lg bg-amber-500/10 text-amber-400">
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8" />
+                </svg>
+              </span>
+              <h3 class="font-medium">Устройства</h3>
+            </div>
+            <div class="mt-3 grid gap-1.5">
+              <Label for="u-devices">Лимит устройств (0 — без лимита)</Label>
+              <Input id="u-devices" type="number" min="0" step="1" bind:value={devices} />
+              <p class="text-xs text-muted-foreground">Подсказка: один роутер = один IP</p>
+            </div>
+          </section>
+        </div>
+
+        <!-- правая колонка -->
+        <div class="space-y-4">
+          <section class="rounded-xl border p-4">
+            <div class="flex items-center gap-2 border-b pb-3">
+              <span class="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/10 text-violet-400">
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 17l5-5 4 3 7-8" /><path d="M14 7h6v6" />
+                </svg>
+              </span>
+              <h3 class="font-medium">Трафик и лимиты</h3>
+            </div>
+            <div class="mt-3 grid gap-3">
+              <div class="grid gap-1.5">
+                <Label for="u-quota">Квота, ГБ (0 — без лимита)</Label>
+                <Input id="u-quota" type="number" min="0" step="0.001" bind:value={quotaGB} />
+              </div>
+              <div class="grid gap-1.5">
+                <Label for="u-period">Сброс квоты</Label>
+                <select
+                  id="u-period"
+                  bind:value={period}
+                  class="border-input bg-input/30 h-8 w-full rounded-lg border px-2.5 text-sm outline-none"
+                >
+                  <option value="none">не сбрасывать</option>
+                  <option value="day">день</option>
+                  <option value="week">неделя</option>
+                  <option value="month">месяц</option>
+                </select>
+              </div>
+            </div>
+          </section>
+
+          <section class="rounded-xl border p-4">
+            <div class="flex items-center gap-2 border-b pb-3">
+              <span class="grid h-9 w-9 place-items-center rounded-lg bg-indigo-500/10 text-indigo-400">
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z" />
+                </svg>
+              </span>
+              <h3 class="font-medium">Настройки доступа</h3>
+            </div>
+            <div class="mt-3 grid gap-1.5">
+              <Label for="u-expiry">Действует до</Label>
+              <Input id="u-expiry" type="datetime-local" bind:value={expiry} required />
+            </div>
+            {#if isEdit}
+              <label class="mt-3 flex items-center gap-2 text-sm">
+                <input type="checkbox" bind:checked={manualOff} class="size-4 accent-primary" />
+                Отключить вручную
+              </label>
+            {/if}
+          </section>
+        </div>
       </div>
-      <div class="grid gap-1.5">
-        <Label for="u-expiry">Действует до</Label>
-        <Input id="u-expiry" type="datetime-local" bind:value={expiry} required />
-      </div>
-      <div class="grid gap-1.5">
-        <Label for="u-quota">Квота, ГБ (0 — без лимита)</Label>
-        <Input id="u-quota" type="number" min="0" step="0.001" bind:value={quotaGB} />
-      </div>
-      <div class="grid gap-1.5">
-        <Label for="u-period">Сброс квоты</Label>
-        <select
-          id="u-period"
-          bind:value={period}
-          class="border-input bg-input/30 h-8 w-full rounded-lg border px-2.5 text-sm outline-none"
-        >
-          <option value="none">не сбрасывать</option>
-          <option value="day">день</option>
-          <option value="week">неделя</option>
-          <option value="month">месяц</option>
-        </select>
-      </div>
-      <div class="grid gap-1.5">
-        <Label for="u-devices">Лимит устройств (0 — без лимита)</Label>
-        <Input id="u-devices" type="number" min="0" step="1" bind:value={devices} />
-        <p class="text-xs text-muted-foreground">Подсказка: один роутер = один IP</p>
-      </div>
-      {#if isEdit}
-        <label class="flex items-center gap-2 text-sm">
-          <input type="checkbox" bind:checked={manualOff} class="size-4 accent-primary" />
-          Отключить вручную
-        </label>
-      {/if}
+
       {#if error}
-        <p class="text-sm text-red-400">{error}</p>
+        <p class="px-5 pb-2 text-sm text-red-400">{error}</p>
       {/if}
-      <div class="mt-1 flex justify-end gap-2">
+      <div class="flex justify-end gap-2 border-t px-5 py-4">
         <Button type="button" variant="outline" onclick={onclose}>Отмена</Button>
-        <Button type="submit" disabled={saving}>{saving ? 'Сохранение…' : 'Сохранить'}</Button>
+        <Button type="submit" disabled={saving}>{saving ? 'Сохранение…' : isEdit ? 'Сохранить' : 'Создать'}</Button>
       </div>
     </form>
   </div>

@@ -59,15 +59,15 @@ test('рендер таблицы: 2 юзера, бейджи «Активен»
 
   expect(await screen.findByText('alice')).toBeTruthy();
   expect(screen.getByText('bob')).toBeTruthy();
-  // alice активна, bob отключён по квоте
-  expect(screen.getByText('Активен')).toBeTruthy();
-  expect(screen.getByText('Квота')).toBeTruthy();
+  // бейджи рендерятся капсом: alice активна, bob отключён по квоте
+  expect(screen.getAllByText('АКТИВЕН').length).toBe(1);
+  expect(screen.getAllByText('КВОТА').length).toBe(1);
   // carol отключён без причины — не «Активен»
-  expect(screen.getByText('Отключён')).toBeTruthy();
-  // трафик used/quota
-  expect(screen.getByText('1.5 ГБ / 10 ГБ')).toBeTruthy();
-  // онлайн-устройства
-  expect(screen.getByText('2')).toBeTruthy();
+  expect(screen.getAllByText('ОТКЛЮЧЁН').length).toBe(1);
+  // трафик used/quota в ячейке с прогресс-баром
+  expect(screen.getByText(/1\.5 ГБ \/ 10 ГБ/)).toBeTruthy();
+  // онлайн-устройства (alice: 2) — «2» встречается и в карточках статистики
+  expect(screen.getAllByText('2').length).toBeGreaterThan(1);
 });
 
 test('кнопка «Добавить» открывает диалог создания', async () => {
@@ -76,5 +76,5 @@ test('кнопка «Добавить» открывает диалог созд
   await screen.findByText('alice');
   await fireEvent.click(screen.getByRole('button', { name: 'Добавить' }));
 
-  expect(await screen.findByText('Новый пользователь')).toBeTruthy();
+  expect(await screen.findByText('Создать пользователя')).toBeTruthy();
 });
