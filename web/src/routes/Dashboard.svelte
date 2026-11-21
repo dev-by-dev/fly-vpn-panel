@@ -9,6 +9,15 @@
   // xray Status has no json tags → Go field names capitalized; Uptime = ns.
   type XrayStatus = { Running: boolean; PID: number; Uptime: number; Restarts: number; Version: string };
   type Summary = { total_up: number; total_down: number; online_count: number };
+  type SystemStats = {
+    cpu_used_percent: number;
+    cpu_cores: number;
+    mem_total: number;
+    mem_used: number;
+    mem_free: number;
+    disk_total: number;
+    disk_free: number;
+  };
 
   let range = $state<'day' | 'week' | 'month'>('day');
   let user = $state('');
@@ -17,6 +26,7 @@
   let devices = $state<Device[]>([]);
   let xray = $state<XrayStatus | null>(null);
   let summary = $state<Summary | null>(null);
+  let sys = $state<SystemStats | null>(null);
   let error = $state('');
   let busy = $state('');
 
@@ -35,16 +45,18 @@
 
   async function loadRest() {
     try {
-      const [dev, st, sum, us] = await Promise.all([
+      const [dev, st, sum, us, sy] = await Promise.all([
         apiFetch('/api/stats/online'),
         apiFetch('/api/xray/status'),
         apiFetch('/api/stats/summary'),
         apiFetch('/api/users'),
+        apiFetch('/api/system'),
       ]);
       if (dev.ok) devices = (await dev.json()) as Device[];
       if (st.ok) xray = (await st.json()) as XrayStatus;
       if (sum.ok) summary = (await sum.json()) as Summary;
       if (us.ok) users = ((await us.json()) as { username: string }[]).slice(0, 100);
+      if (sy.ok) sys = (await sy.json()) as SystemStats;
       error = '';
     } catch {
       error = 'Сеть недоступна';
@@ -76,7 +88,7 @@
 </script>
 
 <div class="flex items-center justify-between">
-  <h1 class="text-2xl font-semibold">Дашборд</h1>
+  <h1 class="text-2xl font-semibold">Главная</h1>
   <Button variant="outline" onclick={reload}>Обновить</Button>
 </div>
 
@@ -84,8 +96,54 @@
   <p class="mt-2 text-sm text-red-400">{error}</p>
 {/if}
 
+<!-- Host metrics -->
+<h2 class="mt-6 font-medium">Сервер</h2>
+<div class="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+  <div class="rounded-xl border bg-card p-4">
+    <div class="text-xs text-muted-foreground">ЦПУ занято</div>
+    <div class="mt-1 text-xl font-semibold">
+      {sys ? `${Math.round(sys.cpu_used_percent)}%` : '—'}
+    </div>
+    {#if sys}
+      <div class="mt-1 text-xs text-muted-foreground">
+        {sys.cpu_cores} ядер · свободно {Math.round(100 - sys.cpu_used_percent)}%
+      </div>
+    {/if}
+  </div>
+  <div class="rounded-xl border bg-card p-4">
+    <div class="text-xs text-muted-foreground">ОЗУ занято</div>
+    <div class="mt-1 text-xl font-semibold">
+      {sys && sys.mem_total > 0 ? fmtBytes(sys.mem_used) : '—'}
+    </div>
+    {#if sys && sys.mem_total > 0}
+      <div class="mt-1 text-xs text-muted-foreground">
+        из {fmtBytes(sys.mem_total)} · свободно {fmtBytes(sys.mem_free)}
+      </div>
+    {/if}
+  </div>
+  <div class="rounded-xl border bg-card p-4">
+    <div class="text-xs text-muted-foreground">Свободно на диске</div>
+    <div class="mt-1 text-xl font-semibold">{sys ? fmtBytes(sys.disk_free) : '—'}</div>
+    {#if sys}
+      <div class="mt-1 text-xs text-muted-foreground">из {fmtBytes(sys.disk_total)}</div>
+    {/if}
+  </div>
+  <div class="rounded-xl border bg-card p-4">
+    <div class="text-xs text-muted-foreground">Потреблено трафика</div>
+    <div class="mt-1 text-xl font-semibold">
+      {summary ? fmtBytes(summary.total_up + summary.total_down) : '—'}
+    </div>
+    {#if summary}
+      <div class="mt-1 text-xs text-muted-foreground">
+        ↑ {fmtBytes(summary.total_up)} · ↓ {fmtBytes(summary.total_down)}
+      </div>
+    {/if}
+  </div>
+</div>
+
 <!-- Summary totals -->
-<div class="mt-4 grid gap-4 sm:grid-cols-3">
+<h2 class="mt-6 font-medium">Трафик панели</h2>
+<div class="mt-3 grid gap-4 sm:grid-cols-3">
   <div class="rounded-xl border bg-card p-4">
     <div class="text-xs text-muted-foreground">Отдано всего</div>
     <div class="mt-1 text-xl font-semibold">{summary ? fmtBytes(summary.total_up) : '—'}</div>

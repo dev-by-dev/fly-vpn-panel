@@ -36,6 +36,8 @@ type Handlers struct {
 	Mgr         Manager
 	Poller      *stats.Poller
 	PanelDomain string
+	// DataDir is the filesystem whose free space the main page shows.
+	DataDir string
 
 	// interval is the live poll interval (also drives the
 	// /api/stats/online window); the settings PUT updates it.

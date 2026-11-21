@@ -25,7 +25,7 @@
   };
 
   const nav = [
-    { href: '#/', path: '/', label: 'Дашборд' },
+    { href: '#/', path: '/', label: 'Главная' },
     { href: '#/users', path: '/users', label: 'Юзеры' },
     { href: '#/inbounds', path: '/inbounds', label: 'Inbounds' },
     { href: '#/routing', path: '/routing', label: 'Routing' },
@@ -42,27 +42,27 @@
     <Login />
   </div>
 {:else}
-  <div class="flex min-h-screen">
-    <aside class="flex w-56 shrink-0 flex-col border-r bg-card">
-      <div class="px-4 py-4 text-lg font-semibold">flypanel</div>
-      <nav class="flex flex-col gap-1 px-2">
-        {#each nav as item (item.href)}
-          <a
-            href={item.href}
-            use:active={{
-              className: 'bg-muted font-medium text-foreground',
-              inactiveClassName: 'text-muted-foreground',
-            }}
-            class="rounded-md px-3 py-2 text-sm hover:bg-muted"
-          >
-            {item.label}
-          </a>
-        {/each}
-      </nav>
-      <div class="mt-auto p-2">
-        <Button variant="outline" class="w-full" onclick={() => logout()}>Выйти</Button>
+  <div class="flex min-h-screen flex-col">
+    <header class="border-b bg-card">
+      <div class="flex items-center gap-4 px-4">
+        <div class="shrink-0 py-4 text-lg font-semibold">flypanel</div>
+        <nav class="flex flex-1 items-center gap-1 overflow-x-auto">
+          {#each nav as item (item.href)}
+            <a
+              href={item.href}
+              use:active={{
+                className: 'border-primary font-medium text-foreground',
+                inactiveClassName: 'border-transparent text-muted-foreground',
+              }}
+              class="-mb-px shrink-0 border-b-2 px-3 py-4 text-sm hover:text-foreground"
+            >
+              {item.label}
+            </a>
+          {/each}
+        </nav>
+        <Button variant="outline" size="sm" class="shrink-0" onclick={() => logout()}>Выйти</Button>
       </div>
-    </aside>
+    </header>
     <main class="min-w-0 flex-1 p-6">
       <Router {routes} />
     </main>

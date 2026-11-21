@@ -66,6 +66,7 @@ func NewRouter(d Deps) http.Handler {
 	apiH := &Handlers{
 		Store: d.Store, Mgr: d.Manager, Poller: d.Poller,
 		PanelDomain: d.Cfg.PanelDomain, interval: interval,
+		DataDir: d.Cfg.DataDir,
 	}
 
 	mux := http.NewServeMux()
@@ -118,6 +119,7 @@ func NewRouter(d Deps) http.Handler {
 	p.HandleFunc("GET /api/stats/traffic", apiH.StatsTraffic)
 	p.HandleFunc("GET /api/stats/online", apiH.StatsOnline)
 	p.HandleFunc("GET /api/stats/summary", apiH.StatsSummary)
+	p.HandleFunc("GET /api/system", apiH.System)
 	p.HandleFunc("GET /api/settings", apiH.SettingsGet)
 	p.HandleFunc("PUT /api/settings", apiH.SettingsPut)
 
