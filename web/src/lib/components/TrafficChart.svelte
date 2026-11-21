@@ -33,7 +33,22 @@
     ],
     scales: { x: { time: true } },
     axes: [
-      { stroke: '#64748b', grid: { stroke: 'rgba(100,116,139,0.15)' }, ticks: { stroke: '#64748b' } },
+      {
+        stroke: '#64748b',
+        grid: { stroke: 'rgba(100,116,139,0.15)' },
+        ticks: { stroke: '#64748b' },
+        // 24-часовой формат: дефолт uPlot печатает «8pm». Короткий диапазон — ЧЧ:ММ, длинный — ДД.ММ ЧЧ:ММ.
+        values: (_u: unknown, splits: number[]) => {
+          const span = splits.length > 1 ? splits[splits.length - 1] - splits[0] : 0;
+          return splits.map((s) => {
+            const d = new Date(s * 1000);
+            const time = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', hour12: false });
+            return span > 86400
+              ? `${d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })} ${time}`
+              : time;
+          });
+        },
+      },
       {
         stroke: '#64748b',
         grid: { stroke: 'rgba(100,116,139,0.15)' },
@@ -53,6 +68,11 @@
       const UPlot = (await import('uplot')).default;
       if (dead) return;
       const conf = opts(height);
+      // Плавные линии: monotone cubic из uPlot (без выбросов за пределы данных).
+      // Типы `export = uPlot` не отдают статик paths на default-импорте, в рантайме он есть.
+      const spline = (UPlot as unknown as { paths: { spline(): unknown } }).paths.spline();
+      (conf.series[1] as Record<string, unknown>).paths = spline;
+      (conf.series[2] as Record<string, unknown>).paths = spline;
       conf.width = node.clientWidth || 600;
       // типы uplot 1.6.32 не описывают setSize, в рантайме метод есть
       chart = new UPlot(conf, toSeries(buckets), node) as unknown as Chart;
