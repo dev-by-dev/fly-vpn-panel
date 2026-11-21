@@ -21,6 +21,7 @@ func GenerateConfig(inbounds []store.Inbound, activeUsers []store.User, routingJ
 	if err != nil {
 		return nil, err
 	}
+	ensureAPIRule(routing)
 
 	clients := make([]any, 0, len(activeUsers))
 	for _, u := range activeUsers {
@@ -99,6 +100,33 @@ func GenerateConfig(inbounds []store.Inbound, activeUsers []store.User, routingJ
 		return nil, fmt.Errorf("marshal config: %w", err)
 	}
 	return append(out, '\n'), nil
+}
+
+// ensureAPIRule prepends the infrastructure rule routing the dokodemo-door
+// "api" inbound to the api service. Without it, gRPC traffic falls through
+// to the freedom outbound and loops back to 127.0.0.1 until the connection
+// closes ("error reading server preface"). Skipped when user rules already
+// route the api inbound.
+func ensureAPIRule(routing map[string]any) {
+	rules, _ := routing["rules"].([]any)
+	for _, r := range rules {
+		m, ok := r.(map[string]any)
+		if !ok {
+			continue
+		}
+		if m["outboundTag"] != "api" {
+			continue
+		}
+		tags, _ := m["inboundTag"].([]any)
+		for _, tag := range tags {
+			if tag == "api" {
+				return
+			}
+		}
+	}
+	routing["rules"] = append([]any{map[string]any{
+		"type": "field", "inboundTag": []any{"api"}, "outboundTag": "api",
+	}}, rules...)
 }
 
 // parseRouting decodes routingJSON, substituting the default for an empty

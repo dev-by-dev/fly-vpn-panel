@@ -83,6 +83,11 @@
     "rules": [
       {
         "type": "field",
+        "inboundTag": ["api"],
+        "outboundTag": "api"
+      },
+      {
+        "type": "field",
         "domain": ["geosite:category-ads-all"],
         "outboundTag": "block"
       }
