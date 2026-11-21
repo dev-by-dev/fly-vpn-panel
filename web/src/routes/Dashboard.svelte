@@ -202,8 +202,16 @@
     </span>
     <div class="min-w-0">
       <div class="text-xs text-muted-foreground">xray</div>
-      <div class="text-lg font-semibold leading-none {xray?.Running ? 'text-emerald-400' : 'text-red-400'}">
-        {xray ? (xray.Running ? 'Работает' : 'Остановлен') : '—'}
+      <div class="text-lg font-semibold leading-none">
+        <span
+          class="inline-block h-3 w-3 rounded-full {xray
+            ? xray.Running
+              ? 'bg-emerald-400'
+              : 'bg-red-400'
+            : 'bg-muted-foreground'}"
+          title={xray ? (xray.Running ? 'Работает' : 'Остановлен') : 'Нет данных'}
+          aria-label={xray ? (xray.Running ? 'Работает' : 'Остановлен') : 'Нет данных'}
+        ></span>
       </div>
       <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <span>{xray?.Version || 'версия —'}</span>
