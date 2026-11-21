@@ -41,6 +41,9 @@ type Handlers struct {
 	Mgr         Manager
 	Poller      *stats.Poller
 	PanelDomain string
+	// EntryIP — адрес VPS: устройства, зашедшие через туннель, приходят
+	// именно с него, и гео по нему было бы провайдером сервера.
+	EntryIP string
 	// DataDir is the filesystem whose free space the main page shows.
 	DataDir string
 
@@ -228,7 +231,7 @@ func (h *Handlers) Devices(w http.ResponseWriter, r *http.Request) {
 	}
 	// Страна/провайдер резолвятся фоном: первый показ может быть без флага.
 	for _, d := range list {
-		if d.Country != "" || geo.Reverse(d.IP) == "" {
+		if d.Country != "" || d.IP == h.EntryIP || geo.Reverse(d.IP) == "" {
 			continue
 		}
 		go func(d store.Device) {

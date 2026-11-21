@@ -65,7 +65,7 @@ func NewRouter(d Deps) http.Handler {
 	subH := &sub.Handlers{Store: d.Store, EntryIP: d.Cfg.EntryIP}
 	apiH := &Handlers{
 		Store: d.Store, Mgr: d.Manager, Poller: d.Poller,
-		PanelDomain: d.Cfg.PanelDomain, interval: interval,
+		PanelDomain: d.Cfg.PanelDomain, EntryIP: d.Cfg.EntryIP, interval: interval,
 		Client:  d.Client,
 		DataDir: d.Cfg.DataDir,
 	}
