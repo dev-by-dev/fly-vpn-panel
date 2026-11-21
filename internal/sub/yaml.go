@@ -36,10 +36,14 @@ func proxyParams(inbounds []store.Inbound, u store.User, entryIP string) (map[st
 		if err != nil {
 			return nil, err
 		}
-		entries = append(entries, fmt.Sprintf(
-			"  - {name: %s, type: vless, server: %s, port: %d, uuid: %s, network: xhttp, tls: true, udp: true, servername: %s, client-fingerprint: %s, reality-opts: {public-key: %s, short-id: %s}, xhttp-opts: {path: %s, mode: %s}}",
-			yamlQuote(p.Tag), yamlQuote(entryIP), p.Port, yamlQuote(u.UUID), yamlQuote(p.SNI),
-			yamlQuote(p.FP), yamlQuote(p.PBK), yamlQuote(p.SID), yamlQuote(p.Path), yamlQuote(p.Mode)))
+		line := fmt.Sprintf(
+			"  - {name: %s, type: vless, server: %s, port: %d, uuid: %s, network: %s, tls: true, udp: true, servername: %s, client-fingerprint: %s, reality-opts: {public-key: %s, short-id: %s}",
+			yamlQuote(p.Tag), yamlQuote(entryIP), p.Port, yamlQuote(u.UUID), p.Net,
+			yamlQuote(p.SNI), yamlQuote(p.FP), yamlQuote(p.PBK), yamlQuote(p.SID))
+		if p.Net == "xhttp" {
+			line += fmt.Sprintf(", xhttp-opts: {path: %s, mode: %s}", yamlQuote(p.Path), yamlQuote(p.Mode))
+		}
+		entries = append(entries, line+"}")
 		names = append(names, yamlQuote(p.Tag))
 	}
 	proxies := "  []"

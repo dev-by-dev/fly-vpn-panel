@@ -10,7 +10,7 @@ import (
 )
 
 // RenderJSON substitutes the per-inbound values into templateJSON (an
-// xray client config carrying {{UUID}} {{ADDRESS}} {{PORT}} {{PBK}}
+// xray client config carrying {{UUID}} {{ADDRESS}} {{PORT}} {{NETWORK}} {{PBK}}
 // {{SID}} {{SNI}} {{FP}} {{PATH}} {{MODE}} {{TAG}}) once per enabled
 // inbound, returning a JSON array of complete client configs. A leftover
 // or unknown placeholder, or a rendered config that is not valid JSON,
@@ -35,6 +35,7 @@ func RenderJSON(inbounds []store.Inbound, u store.User, entryIP, templateJSON st
 			"{{UUID}}", u.UUID,
 			"{{ADDRESS}}", entryIP,
 			"{{PORT}}", strconv.Itoa(p.Port),
+			"{{NETWORK}}", p.Net,
 			"{{PBK}}", p.PBK,
 			"{{SID}}", p.SID,
 			"{{SNI}}", p.SNI,

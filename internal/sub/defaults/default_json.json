@@ -123,7 +123,7 @@
         ]
       },
       "streamSettings": {
-        "network": "xhttp",
+        "network": "{{NETWORK}}",
         "security": "reality",
         "realitySettings": {
           "serverName": "{{SNI}}",

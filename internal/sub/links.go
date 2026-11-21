@@ -17,6 +17,7 @@ import (
 type linkParams struct {
 	Tag  string
 	Port int
+	Net  string
 	PBK  string
 	SID  string
 	SNI  string
@@ -43,19 +44,31 @@ func inboundParams(in store.Inbound) (linkParams, error) {
 	if ss == nil {
 		return linkParams{}, fmt.Errorf("inbound %s: missing streamSettings", in.Tag)
 	}
+	p.Net = str(ss["network"])
+	if p.Net == "" {
+		p.Net = "xhttp" // старые конфиги без network были XHTTP
+	}
 	rs, _ := ss["realitySettings"].(map[string]any)
-	xs, _ := ss["xhttpSettings"].(map[string]any)
-	if rs == nil || xs == nil {
-		return linkParams{}, fmt.Errorf("inbound %s: missing reality/xhttp settings", in.Tag)
+	if rs == nil {
+		return linkParams{}, fmt.Errorf("inbound %s: missing reality settings", in.Tag)
 	}
 	p.PBK = str(rs["publicKey"])
 	p.SID = firstString(rs["shortIds"])
 	p.SNI = firstString(rs["serverNames"])
 	p.FP = str(rs["fingerprint"])
-	p.Path = str(xs["path"])
-	p.Mode = str(xs["mode"])
-	if p.PBK == "" || p.SID == "" || p.SNI == "" || p.Path == "" || p.Mode == "" {
-		return linkParams{}, fmt.Errorf("inbound %s: incomplete reality/xhttp settings", in.Tag)
+	if p.Net == "xhttp" {
+		xs, _ := ss["xhttpSettings"].(map[string]any)
+		if xs == nil {
+			return linkParams{}, fmt.Errorf("inbound %s: missing xhttp settings", in.Tag)
+		}
+		p.Path = str(xs["path"])
+		p.Mode = str(xs["mode"])
+		if p.Path == "" || p.Mode == "" {
+			return linkParams{}, fmt.Errorf("inbound %s: incomplete xhttp settings", in.Tag)
+		}
+	}
+	if p.PBK == "" || p.SID == "" || p.SNI == "" {
+		return linkParams{}, fmt.Errorf("inbound %s: incomplete reality settings", in.Tag)
 	}
 	if p.FP == "" {
 		p.FP = "chrome"
@@ -77,9 +90,11 @@ func RenderBase64(inbounds []store.Inbound, u store.User, entryIP string) string
 			continue
 		}
 		q := url.Values{}
-		q.Set("type", "xhttp")
-		q.Set("path", p.Path)
-		q.Set("mode", p.Mode)
+		q.Set("type", p.Net)
+		if p.Net == "xhttp" {
+			q.Set("path", p.Path)
+			q.Set("mode", p.Mode)
+		}
 		q.Set("security", "reality")
 		q.Set("pbk", p.PBK)
 		q.Set("sid", p.SID)

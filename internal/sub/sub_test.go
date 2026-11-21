@@ -58,6 +58,27 @@ func inboundB() store.Inbound {
 	return testInbound("in-b", 9443, "pbk_b", "sid_b", "c.example.com", "/xb", "packet-up", "firefox")
 }
 
+// tcpInbound: VLESS+TCP+Reality — транспорт, который понимают все клиенты.
+func tcpInbound() store.Inbound {
+	cfg := map[string]any{
+		"port": 8444,
+		"tag":  "in-tcp",
+		"streamSettings": map[string]any{
+			"network":  "tcp",
+			"security": "reality",
+			"realitySettings": map[string]any{
+				"dest":        "www.microsoft.com:443",
+				"serverNames": []any{"t.example.com"},
+				"privateKey":  "priv_tcp",
+				"publicKey":   "pbk_tcp",
+				"shortIds":    []any{"sid_tcp"},
+			},
+		},
+	}
+	raw, _ := json.Marshal(cfg)
+	return store.Inbound{Tag: "in-tcp", Enabled: true, ConfigJSON: string(raw)}
+}
+
 func testUser() store.User {
 	return store.User{
 		Username: "testuser", UUID: testUUID, SubToken: "tok1234567890abc",
@@ -145,6 +166,46 @@ func TestRenderBase64(t *testing.T) {
 		if u.Fragment != wantTag {
 			t.Errorf("line %d: fragment = %q, want %q", i, u.Fragment, wantTag)
 		}
+	}
+}
+
+func TestRenderBase64TCP(t *testing.T) {
+	out := RenderBase64([]store.Inbound{inboundA(), tcpInbound()}, testUser(), testEntryIP)
+	raw, err := base64.StdEncoding.DecodeString(out)
+	if err != nil {
+		t.Fatalf("decode base64: %v", err)
+	}
+	lines := strings.Split(string(raw), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("want 2 lines, got %d: %q", len(lines), raw)
+	}
+	// xhttp inbound keeps path/mode; tcp inbound must not carry them.
+	xhttpURL, err := url.Parse(lines[0])
+	if err != nil {
+		t.Fatalf("parse xhttp link: %v", err)
+	}
+	if q := xhttpURL.Query(); q.Get("type") != "xhttp" || q.Get("path") != "/xa" || q.Get("mode") != "auto" {
+		t.Errorf("xhttp link lost path/mode: %q", lines[0])
+	}
+	u, err := url.Parse(lines[1])
+	if err != nil {
+		t.Fatalf("parse tcp link: %v", err)
+	}
+	if u.Host != fmt.Sprintf("%s:%d", testEntryIP, 8444) {
+		t.Errorf("host = %q, want %s:8444", u.Host, testEntryIP)
+	}
+	q := u.Query()
+	exp := map[string]string{
+		"type": "tcp", "security": "reality", "encryption": "none",
+		"pbk": "pbk_tcp", "sid": "sid_tcp", "sni": "t.example.com", "fp": "chrome",
+	}
+	for k, v := range exp {
+		if got := q.Get(k); got != v {
+			t.Errorf("query %s = %q, want %q", k, got, v)
+		}
+	}
+	if q.Has("path") || q.Has("mode") {
+		t.Errorf("tcp link must not carry path/mode: %q", lines[1])
 	}
 }
 
