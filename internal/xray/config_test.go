@@ -111,6 +111,20 @@ func TestGenerateGolden(t *testing.T) {
 // TestGenerateVlessDecryption: xray 26.x rejects vless inbounds whose
 // settings lack decryption:"none". GenerateConfig must inject it for
 // vless inbounds only — never for other protocols (e.g. dokodemo-door).
+// TestGenerateStatsObject: xray-core only loads the app/stats manager
+// when the JSON config carries a top-level "stats" object; policy stats
+// flags alone create no counters, so the poller would record nothing.
+func TestGenerateStatsObject(t *testing.T) {
+	cfg, err := GenerateConfig(testInbounds(), nil, "", "", testAPIPort)
+	if err != nil {
+		t.Fatalf("GenerateConfig(): %v", err)
+	}
+	stats, ok := unmarshalAny(t, cfg, "generated").(map[string]any)["stats"].(map[string]any)
+	if !ok || stats == nil {
+		t.Errorf("top-level stats = %v, want non-null object so the stats manager loads", stats)
+	}
+}
+
 func TestGenerateVlessDecryption(t *testing.T) {
 	inbounds := []store.Inbound{
 		{ID: 1, Tag: "vless-nodec", Enabled: true, ConfigJSON: `{

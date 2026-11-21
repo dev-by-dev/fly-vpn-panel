@@ -70,6 +70,9 @@ func GenerateConfig(inbounds []store.Inbound, activeUsers []store.User, routingJ
 
 	cfg := map[string]any{
 		"log": map[string]any{"loglevel": "warning"},
+		// xray-core only loads the app/stats manager when this object
+		// exists; policy stats flags alone create no counters.
+		"stats": map[string]any{},
 		"api": map[string]any{
 			"tag":      "api",
 			"services": []any{"HandlerService", "StatsService"},
