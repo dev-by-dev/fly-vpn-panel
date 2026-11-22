@@ -278,6 +278,40 @@ func TestOnlineDevices(t *testing.T) {
 	}
 }
 
+func TestOnlineDevicesIgnoreOtherIPs(t *testing.T) {
+	st := openStore(t)
+	mkUser(t, st, "alice@example.com", nil)
+	old := time.Now().Add(-2 * time.Hour).UTC().Truncate(time.Second)
+	if err := st.DeviceUpsert("alice@example.com", "203.0.113.7", store.DeviceMeta{HWID: "a"}, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DeviceUpsert("alice@example.com", "203.0.113.8", store.DeviceMeta{HWID: "b"}, old); err != nil {
+		t.Fatal(err)
+	}
+	fs := &fakeStats{
+		online: []string{"alice@example.com"},
+		ips:    map[string][]string{"alice@example.com": {"203.0.113.7"}},
+	}
+	NewPoller(st, fs, newFakeSync(), 30*time.Second).tick(context.Background())
+
+	devs, err := st.DevicesForUser("alice@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range devs {
+		switch d.IP {
+		case "203.0.113.7":
+			if d.LastSeen.Before(time.Now().Add(-time.Minute)) {
+				t.Errorf("online device last_seen = %v, want refreshed", d.LastSeen)
+			}
+		case "203.0.113.8":
+			if !d.LastSeen.Equal(old) {
+				t.Errorf("device on another ip last_seen = %v, want untouched %v", d.LastSeen, old)
+			}
+		}
+	}
+}
+
 func TestPrune(t *testing.T) {
 	st := openStore(t)
 	mkUser(t, st, "dave@example.com", nil)

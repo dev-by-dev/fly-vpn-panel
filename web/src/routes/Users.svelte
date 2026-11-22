@@ -32,6 +32,7 @@
     FirstSeen: string;
     LastSeen: string;
     online: boolean;
+    same_ip: boolean;
     HWID: string;
     Platform: string;
     OSVersion: string;
@@ -372,13 +373,22 @@
               <td class="px-3 py-2">
                 <div class="flex items-center gap-2">
                   <span
-                    class="h-2.5 w-2.5 shrink-0 rounded-full {d.online ? 'bg-emerald-400' : 'bg-red-400'}"
+                    class="h-2.5 w-2.5 shrink-0 rounded-full {d.online
+                      ? 'bg-emerald-400'
+                      : d.same_ip
+                        ? 'bg-slate-500'
+                        : 'bg-red-400'}"
                   ></span>
                   <span class="font-medium">{d.Username}</span>
                 </div>
               </td>
               <td class="px-3 py-2 text-muted-foreground">{userId(d.Username)}</td>
-              <td class="px-3 py-2 font-mono text-xs">{d.IP}</td>
+              <td class="px-3 py-2 font-mono text-xs">
+                {d.IP}
+                {#if d.same_ip}
+                  <span class="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground">тот же IP</span>
+                {/if}
+              </td>
               <td class="px-3 py-2 text-xs">{flagOf(d.Country)} {d.Country || '—'}</td>
               <td class="px-3 py-2 text-xs text-muted-foreground">{d.Provider || '—'}</td>
               <td class="px-3 py-2 text-muted-foreground">{d.Platform || '—'}</td>

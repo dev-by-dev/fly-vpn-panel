@@ -224,10 +224,26 @@ func (h *Handlers) Devices(w http.ResponseWriter, r *http.Request) {
 	type row struct {
 		store.Device
 		Online bool `json:"online"`
+		// SameIP — устройство делит адрес с онлайн-строкой: xray знает
+		// только пару (юзер, IP), различить устройства за NAT нельзя.
+		SameIP bool `json:"same_ip"`
+	}
+	// Одна зелёная точка на пару (юзер, IP): самая свежая строка пары,
+	// при равенстве — последняя в выборке.
+	best := make(map[string]int, len(list))
+	for i, d := range list {
+		if d.LastSeen.Before(cutoff) {
+			continue
+		}
+		key := d.Username + "\x00" + d.IP
+		if j, ok := best[key]; !ok || list[j].LastSeen.Before(d.LastSeen) {
+			best[key] = i
+		}
 	}
 	out := make([]row, 0, len(list))
-	for _, d := range list {
-		out = append(out, row{Device: d, Online: !d.LastSeen.Before(cutoff)})
+	for i, d := range list {
+		j, seen := best[d.Username+"\x00"+d.IP]
+		out = append(out, row{Device: d, Online: seen && j == i, SameIP: seen && j != i})
 	}
 	// Страна/провайдер резолвятся фоном: первый показ может быть без флага.
 	for _, d := range list {

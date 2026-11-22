@@ -115,17 +115,6 @@ func (s *Store) devicesQuery(query string, args ...any) ([]Device, error) {
 	return devices, rows.Err()
 }
 
-// DeviceTouchUser обновляет last_seen всем устройствам юзера. xray
-// знает только IP, поэтому за NAT устройства не различить: пока юзер
-// онлайн, его устройства считаются онлайн.
-func (s *Store) DeviceTouchUser(username string, now time.Time) error {
-	_, err := s.DB().Exec(`UPDATE devices SET last_seen = ? WHERE username = ?`, fmtTime(now), username)
-	if err != nil {
-		return fmt.Errorf("device touch user: %w", err)
-	}
-	return nil
-}
-
 // DevicesOnline returns devices with last_seen >= since, ordered by
 // username then ip.
 func (s *Store) DevicesOnline(since time.Time) ([]Device, error) {

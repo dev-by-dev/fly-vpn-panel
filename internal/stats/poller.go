@@ -172,13 +172,9 @@ func (p *Poller) tick(ctx context.Context) {
 					log.Printf("stats: device %q/%q: %v", name, ip, err)
 				}
 			}
-			// За NAT xray видит только один IP на юзера: держим онлайн
-			// все его устройства, пока он подключён.
-			if len(ips) > 0 {
-				if err := p.st.DeviceTouchUser(name, now); err != nil {
-					log.Printf("stats: device touch %q: %v", name, err)
-				}
-			}
+			// Трогаем только устройства с реально онлайн IP: строки с
+			// других адресов должны стареть сами, иначе они висят
+			// «онлайн» вечно.
 		}
 	}
 
