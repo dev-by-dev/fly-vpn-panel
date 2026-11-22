@@ -21,6 +21,18 @@ const de: Record<keyof typeof ru, string> = {
   'common.refresh': 'Aktualisieren',
   'common.error': 'Fehler',
   'common.network': 'Netzwerk nicht erreichbar',
+  'errors.invalid_credentials': 'Falscher Login oder Passwort',
+  'errors.password_too_short': 'Passwort ist kürzer als 12 Zeichen',
+  'errors.invalid_token_request': 'Name, Rechte und Laufzeit des Tokens prüfen',
+  'errors.broken_template': 'Vorlage defekt: Platzhalter werden nicht ersetzt',
+  'errors.invalid_json': 'Ungültiges JSON',
+  'errors.invalid_routing': 'Ungültiges Routing: JSON-Objekt erforderlich',
+  'errors.xray_down': 'xray ist nicht erreichbar',
+  'errors.not_found': 'Nicht gefunden',
+  'errors.unauthorized': 'Anmeldung erforderlich',
+  'errors.forbidden': 'Keine Berechtigung',
+  'errors.bad_request': 'Ungültige Anfrage',
+  'errors.internal': 'Interner Fehler der Oberfläche',
 };
 
 export default de;

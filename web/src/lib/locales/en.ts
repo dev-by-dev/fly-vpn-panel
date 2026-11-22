@@ -21,6 +21,18 @@ const en: Record<keyof typeof ru, string> = {
   'common.refresh': 'Refresh',
   'common.error': 'Error',
   'common.network': 'Network unavailable',
+  'errors.invalid_credentials': 'Wrong login or password',
+  'errors.password_too_short': 'Password is shorter than 12 characters',
+  'errors.invalid_token_request': 'Check the token name, scope and lifetime',
+  'errors.broken_template': 'Template is broken: placeholders do not render',
+  'errors.invalid_json': 'Invalid JSON',
+  'errors.invalid_routing': 'Invalid routing: a JSON object is required',
+  'errors.xray_down': 'xray is unavailable',
+  'errors.not_found': 'Not found',
+  'errors.unauthorized': 'Sign-in required',
+  'errors.forbidden': 'Not enough permissions',
+  'errors.bad_request': 'Bad request',
+  'errors.internal': 'Panel internal error',
 };
 
 export default en;
