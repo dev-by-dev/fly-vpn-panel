@@ -2,6 +2,7 @@ import { test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import Templates from './Templates.svelte';
+import { setLang } from '$lib/i18n.svelte';
 
 // Разрешённые плейсхолдеры рендереров: internal/sub/json.go подставляет
 // только этот набор (любой лишний {{ → 400 broken_template);
@@ -46,4 +47,13 @@ test.each(['mihomo', 'clash'])('%s hint: только {{PROXIES}}/{{PROXY_NAMES}
   for (const t of tokens) {
     expect(YAML_ALLOWED.has(t), `${fmt} hint рекламирует ${t}`).toBe(true);
   }
+});
+
+test('английский язык переводит страницу шаблонов', () => {
+  setLang('en');
+  render(Templates);
+  expect(screen.getByText('Subscription templates')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Save' })).toBeTruthy();
+  expect(screen.queryByText('Шаблоны подписок')).toBeNull();
+  setLang('ru');
 });

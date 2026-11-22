@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { apiFetch } from '$lib/api';
   import { Button } from '$lib/components/ui/button';
+  import { t } from '$lib/i18n.svelte';
 
   let cfg = $state('');
   let notGenerated = $state(false);
@@ -31,7 +32,7 @@
         return;
       }
       if (!res.ok) {
-        error = `Не удалось загрузить (${res.status})`;
+        error = t('config.loadFail', { status: res.status });
         return;
       }
       const text = await res.text();
@@ -41,7 +42,7 @@
         cfg = text;
       }
     } catch {
-      error = 'Сеть недоступна';
+      error = t('common.network');
     }
   }
 
@@ -49,7 +50,7 @@
     try {
       const res = await apiFetch('/api/config/routing');
       if (!res.ok) {
-        rError = `Не удалось загрузить routing (${res.status})`;
+        rError = t('config.routingLoadFail', { status: res.status });
         return;
       }
       const raw = await res.text();
@@ -59,7 +60,7 @@
         rText = raw; // уже не-JSON — покажем как есть
       }
     } catch {
-      rError = 'Сеть недоступна';
+      rError = t('common.network');
     }
   }
 
@@ -68,10 +69,10 @@
     try {
       JSON.parse(rText);
       rCheckOk = true;
-      rCheckMsg = 'JSON корректен';
+      rCheckMsg = t('config.jsonOk');
     } catch (e) {
       rCheckOk = false;
-      rCheckMsg = `Некорректный JSON: ${(e as Error).message}`;
+      rCheckMsg = t('config.jsonBad', { msg: (e as Error).message });
     }
   }
 
@@ -82,7 +83,7 @@
       const res = await apiFetch('/api/config/routing', { method: 'PUT', body: rText });
       if (res.ok) {
         rApplyOk = true;
-        rApplyMsg = 'Применено';
+        rApplyMsg = t('config.applied');
         await loadConfig();
         return;
       }
@@ -91,16 +92,16 @@
       if (res.status === 422) {
         rApplyMsg =
           data.error === 'invalid_json'
-            ? 'Некорректный JSON (422)'
-            : 'Применение не удалось (422), конфиг откачен к прежнему значению';
+            ? t('config.invalidJson422')
+            : t('config.applyFailed422');
       } else if (res.status === 502) {
-        rApplyMsg = 'xray недоступен (502)';
+        rApplyMsg = t('config.xrayDown502');
       } else {
-        rApplyMsg = `Ошибка (${res.status}${data.error ? `: ${data.error}` : ''})`;
+        rApplyMsg = t('config.errGeneric', { status: res.status, code: data.error ? `: ${data.error}` : '' });
       }
     } catch {
       rApplyOk = false;
-      rApplyMsg = 'Сеть недоступна';
+      rApplyMsg = t('common.network');
     }
   }
 
@@ -111,16 +112,16 @@
 </script>
 
 <div class="flex items-center justify-between">
-  <h1 class="text-2xl font-semibold">Конфиг</h1>
+  <h1 class="text-2xl font-semibold">{t('config.title')}</h1>
   {#if cfg}
-    <Button variant="outline" onclick={copy}>{copied ? 'Скопировано' : 'Копировать'}</Button>
+    <Button variant="outline" onclick={copy}>{copied ? t('config.copied') : t('config.copy')}</Button>
   {/if}
 </div>
 
 {#if error}
   <p class="mt-2 text-sm text-red-400">{error}</p>
 {:else if notGenerated}
-  <p class="mt-2 text-sm text-muted-foreground">Конфиг ещё не сгенерирован.</p>
+  <p class="mt-2 text-sm text-muted-foreground">{t('config.notGenerated')}</p>
 {:else}
   <pre
     class="mt-4 max-h-[70vh] overflow-auto rounded-xl border bg-muted/30 p-4 font-mono text-xs whitespace-pre-wrap"
@@ -129,7 +130,7 @@
 
 <h2 class="mt-8 text-lg font-semibold">Routing (advanced JSON)</h2>
 <p class="mt-2 text-sm text-muted-foreground">
-  ⚠ Применение сразу изменяет работающий xray; при ошибке применения значение откатывается к прежнему.
+  {t('config.warn')}
 </p>
 
 {#if rError}
@@ -142,8 +143,8 @@
     class="mt-4 h-[40vh] w-full rounded-xl border bg-muted/30 p-4 font-mono text-xs"
   ></textarea>
   <div class="mt-3 flex items-center gap-3">
-    <Button variant="outline" onclick={rCheck}>Проверить</Button>
-    <Button onclick={rApply}>Применить</Button>
+    <Button variant="outline" onclick={rCheck}>{t('config.check')}</Button>
+    <Button onclick={rApply}>{t('config.apply')}</Button>
     {#if rCheckMsg}
       <span class="text-sm {rCheckOk ? 'text-emerald-400' : 'text-red-400'}">{rCheckMsg}</span>
     {:else if rApplyMsg}

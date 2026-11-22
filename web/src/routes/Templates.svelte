@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { apiFetch } from '$lib/api';
   import { Button } from '$lib/components/ui/button';
+  import { t } from '$lib/i18n.svelte';
 
   const formats = [
     { id: 'json', label: 'json' },
@@ -13,11 +14,12 @@
   // Placeholder sets mirror internal/sub renderers: json.go подставляет
   // только набор ниже; yaml.go exposes только {{PROXIES}}/{{PROXY_NAMES}} —
   // per-proxy поля (UUID/ADDRESS/…) живут внутри сгенерированной подстановки.
-  const hints: Record<Format, string> = {
+  const hints = (f: Format): string =>
+    ({
     json: '{{UUID}} {{ADDRESS}} {{PORT}} {{NETWORK}} {{PBK}} {{SID}} {{SNI}} {{FP}} {{PATH}} {{MODE}} {{TAG}}',
-    mihomo: '{{PROXIES}} {{PROXY_NAMES}} (поля внутри — UUID/ADDRESS/PORT/SNI/PATH/…)',
-    clash: '{{PROXIES}} {{PROXY_NAMES}} (поля внутри — UUID/ADDRESS/PORT/SNI/PATH/…)',
-  };
+    mihomo: `{{PROXIES}} {{PROXY_NAMES}} ${t('templates.proxiesHint')}`,
+    clash: `{{PROXIES}} {{PROXY_NAMES}} ${t('templates.proxiesHint')}`,
+    })[f];
 
   let active = $state<Format>('json');
   let templates = $state<Record<string, string>>({});
@@ -29,13 +31,13 @@
     try {
       const res = await apiFetch(`/api/templates/${f}`);
       if (!res.ok) {
-        error = `Не удалось загрузить (${res.status})`;
+        error = t('templates.loadFail', { status: res.status });
         return;
       }
       templates[f] = await res.text();
       error = '';
     } catch {
-      error = 'Сеть недоступна';
+      error = t('common.network');
     }
   }
 
@@ -53,15 +55,15 @@
       });
       if (res.ok) {
         ok = true;
-        msg = 'Сохранено';
+        msg = t('templates.saved');
       } else {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         ok = false;
-        msg = data.error === 'broken_template' ? 'Сломанный шаблон (400): плейсхолдеры не подставляются' : `Ошибка (${res.status})`;
+        msg = data.error === 'broken_template' ? t('templates.broken') : t('config.errGeneric', { status: res.status, code: '' });
       }
     } catch {
       ok = false;
-      msg = 'Сеть недоступна';
+      msg = t('common.network');
     }
   }
 
@@ -71,7 +73,7 @@
   }
 </script>
 
-<h1 class="text-2xl font-semibold">Шаблоны подписок</h1>
+<h1 class="text-2xl font-semibold">{t('templates.title')}</h1>
 
 {#if error}
   <p class="mt-2 text-sm text-red-400">{error}</p>
@@ -86,7 +88,7 @@
 </div>
 
 <p class="mt-3 text-xs text-muted-foreground">
-  Доступные плейсхолдеры: <code class="text-foreground">{hints[active]}</code>
+  {t('templates.placeholders')} <code class="text-foreground">{hints(active)}</code>
 </p>
 
 <textarea
@@ -96,7 +98,7 @@
 ></textarea>
 
 <div class="mt-3 flex items-center gap-3">
-  <Button onclick={save}>Сохранить</Button>
+  <Button onclick={save}>{t('templates.save')}</Button>
   {#if msg}
     <span class="text-sm {ok ? 'text-emerald-400' : 'text-red-400'}">{msg}</span>
   {/if}

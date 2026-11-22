@@ -1,6 +1,7 @@
 import { test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/svelte';
 import Config from './Config.svelte';
+import { setLang } from '$lib/i18n.svelte';
 
 const routing = '{"domainStrategy":"AsIs","rules":[]}';
 
@@ -90,4 +91,13 @@ test('успешное применение перечитывает конфи�
   configBody = '{"inbounds":[{"tag":"fresh"}]}';
   await fireEvent.click(screen.getByRole('button', { name: 'Применить' }));
   await screen.findByText(/fresh/);
+});
+test('английский язык переводит страницу конфига', async () => {
+  setLang('en');
+  render(Config);
+  await screen.findByText(/inbounds/);
+  expect(screen.getByText('Config')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Apply' })).toBeTruthy();
+  expect(screen.queryByText('Конфиг')).toBeNull();
+  setLang('ru');
 });
