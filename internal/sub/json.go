@@ -23,8 +23,9 @@ func RenderJSON(inbounds []store.Inbound, u store.User, entryIP, templateJSON st
 			continue
 		}
 		p, err := inboundParams(in)
+		// One odd inbound must not 500 the whole subscription; RenderBase64 skips it the same way.
 		if err != nil {
-			return nil, err
+			continue
 		}
 		out := templateJSON
 		// Single-pass replacer: substituted values are never re-scanned,

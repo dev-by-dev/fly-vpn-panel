@@ -224,6 +224,12 @@ fatal() {
   exit 1
 }
 
+open_install_log() {
+  # summary() prints the admin password; umask alone gives the log 0644.
+  install -m 600 /dev/null "$INSTALL_LOG"
+  exec > >(tee -a "$INSTALL_LOG") 2>&1
+}
+
 have() { command -v "$1" >/dev/null 2>&1; }
 
 pkg_installed() {
@@ -450,13 +456,15 @@ panel_admin_exists() {
 }
 
 collect_answers() {
-  while [ -z "$DOMAIN" ]; do
-    DOMAIN=$(ask "$(t q_domain)" "")
-    valid_domain "$DOMAIN" || DOMAIN=""
+  while true; do
+    [ -n "$DOMAIN" ] || DOMAIN=$(ask "$(t q_domain)" "")
+    valid_domain "$DOMAIN" && break
+    # --yes or piped stdin cannot re-ask: die instead of spinning.
+    if $ASSUME_YES || [ ! -t 0 ]; then
+      fatal "invalid domain: $DOMAIN"
+    fi
+    DOMAIN=""
   done
-  if ! valid_domain "$DOMAIN"; then
-    fatal "invalid domain: $DOMAIN"
-  fi
   [ -n "$EMAIL" ] || EMAIL=$(ask "$(t q_email)" "")
   ADMIN_NAME=$(ask "$(t q_admin)" "$ADMIN_NAME")
   [ -n "$ADMIN_NAME" ] || ADMIN_NAME=admin
@@ -707,7 +715,6 @@ configure_selinux() {
   fi
   run semanage port -a -t http_port_t -p tcp 8443 2>/dev/null || run semanage port -m -t http_port_t -p tcp 8443
   run semanage port -a -t http_port_t -p tcp "$ACCESS_PORT" 2>/dev/null || run semanage port -m -t http_port_t -p tcp "$ACCESS_PORT"
-  run systemctl restart caddy flypanel
   ok
 }
 
@@ -917,7 +924,7 @@ main() {
   fi
   echo "$(t welcome)"
   if ! $DRY_RUN; then
-    exec > >(tee -a "$INSTALL_LOG") 2>&1
+    open_install_log
   fi
   preflight
   collect_answers

@@ -203,13 +203,11 @@ caddyfile_strip() {
   return 0
 }
 
-# caddy_unit_is_ours: our unit points at /usr/local/bin/caddy. An unreadable
-# unit is still ours as far as a dry-run can tell (the real run is root).
+# caddy_unit_is_ours: our unit points at /usr/local/bin/caddy. Anything
+# else — foreign path, unreadable file — is not ours; never remove it.
 caddy_unit_is_ours() {
-  local unit=/etc/systemd/system/caddy.service
-  [ -f "$unit" ] || return 1
-  grep -q '/usr/local/bin/caddy' "$unit" 2>/dev/null && return 0
-  [ -r "$unit" ] || $DRY_RUN
+  [ -f "$CADDY_UNIT" ] || return 1
+  grep -q '/usr/local/bin/caddy' "$CADDY_UNIT" 2>/dev/null
 }
 
 stop_units() {
@@ -412,6 +410,7 @@ confirm_removal() {
 }
 
 PANEL_UNIT=${PANEL_UNIT:-/etc/systemd/system/flypanel.service}
+CADDY_UNIT=${CADDY_UNIT:-/etc/systemd/system/caddy.service}
 
 # panel_installed: the firewall and SELinux rules are ours only when the panel
 # is; a hand-installed Caddy elsewhere on the box must not lose its ports.

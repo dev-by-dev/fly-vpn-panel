@@ -27,6 +27,7 @@ type Manager struct {
 	cfgPath string
 
 	mu        sync.Mutex
+	opMu      sync.Mutex // serializes public Start/Stop/Restart; mu guards fields
 	cmd       *exec.Cmd
 	running   bool
 	startedAt time.Time
@@ -58,6 +59,12 @@ func parseVersion(out string) string {
 // Start launches xray, captures its version, and begins supervising it.
 // It is a no-op if xray is already running or a crash restart is pending.
 func (m *Manager) Start() error {
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
+	return m.startLocked()
+}
+
+func (m *Manager) startLocked() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.running || (m.stopCh != nil && !m.stopped) {
@@ -84,6 +91,12 @@ func (m *Manager) Start() error {
 // Stop terminates xray gracefully: SIGTERM, up to 5s wait, then SIGKILL.
 // It blocks until the child is fully reaped, so no zombie is left behind.
 func (m *Manager) Stop() error {
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
+	return m.stopLocked()
+}
+
+func (m *Manager) stopLocked() error {
 	m.mu.Lock()
 	if m.cmd == nil {
 		m.mu.Unlock()
@@ -107,8 +120,12 @@ func (m *Manager) Stop() error {
 	if m.running && m.cmd != nil && m.cmd.Process != nil {
 		_ = m.cmd.Process.Kill()
 	}
-	m.running = false
-	m.cmd = nil
+	// A supervisor respawn may have swapped m.cmd mid-stop; only clear the
+	// state we own. The supervisor reaps its own child and exits via stopCh.
+	if m.cmd == cmd {
+		m.running = false
+		m.cmd = nil
+	}
 	m.mu.Unlock()
 
 	m.wg.Wait()
@@ -117,10 +134,12 @@ func (m *Manager) Stop() error {
 
 // Restart stops xray (fully) and starts it again.
 func (m *Manager) Restart() error {
-	if err := m.Stop(); err != nil {
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
+	if err := m.stopLocked(); err != nil {
 		return err
 	}
-	return m.Start()
+	return m.startLocked()
 }
 
 // Status returns the current snapshot of the child process.

@@ -79,6 +79,21 @@ func tcpInbound() store.Inbound {
 	return store.Inbound{Tag: "in-tcp", Enabled: true, ConfigJSON: string(raw)}
 }
 
+// inboundNoReality: streamSettings without realitySettings — inboundParams
+// rejects it, so the renders must skip it instead of failing the whole sub.
+func inboundNoReality() store.Inbound {
+	cfg := map[string]any{
+		"port": 8445,
+		"tag":  "in-noreality",
+		"streamSettings": map[string]any{
+			"network":  "tcp",
+			"security": "none",
+		},
+	}
+	raw, _ := json.Marshal(cfg)
+	return store.Inbound{Tag: "in-noreality", Enabled: true, ConfigJSON: string(raw)}
+}
+
 func testUser() store.User {
 	return store.User{
 		Username: "testuser", UUID: testUUID, SubToken: "tok1234567890abc",
@@ -361,6 +376,47 @@ func TestFormatForUA(t *testing.T) {
 		if got := FormatForUA(c.ua); got != c.want {
 			t.Errorf("FormatForUA(%q) = %q, want %q", c.ua, got, c.want)
 		}
+	}
+}
+
+func TestRenderSkipsUnparseableInbound(t *testing.T) {
+	user, entry := testUser(), testEntryIP
+
+	out, err := RenderJSON([]store.Inbound{inboundNoReality(), inboundA()}, user, entry, DefaultTemplate("json"))
+	if err != nil {
+		t.Fatalf("RenderJSON: %v", err)
+	}
+	if s := string(out); strings.Contains(s, "in-noreality") || !strings.Contains(s, `"in-a"`) {
+		t.Fatalf("json render = %s", s)
+	}
+
+	params, err := proxyParams([]store.Inbound{inboundNoReality(), inboundA()}, user, entry)
+	if err != nil {
+		t.Fatalf("proxyParams: %v", err)
+	}
+	if strings.Contains(params["PROXIES"], "in-noreality") || !strings.Contains(params["PROXIES"], "in-a") {
+		t.Fatalf("yaml proxies = %s", params["PROXIES"])
+	}
+
+	empty, err := RenderJSON([]store.Inbound{inboundNoReality()}, user, entry, DefaultTemplate("json"))
+	if err != nil || string(empty) != "[]" {
+		t.Fatalf("all-unparseable: out=%q err=%v", empty, err)
+	}
+
+	// Handler level: one broken inbound must not 500 the subscription.
+	st, mux := newTestServer(t)
+	u := &store.User{Username: "skipuser", UUID: testUUID, SubToken: "skiptoken1", Expiry: time.Now().Add(time.Hour).UTC(), CreatedAt: time.Now().UTC()}
+	if err := st.UserCreate(u); err != nil {
+		t.Fatal(err)
+	}
+	for _, in := range []store.Inbound{inboundNoReality(), inboundA()} {
+		if err := st.InboundCreate(&in); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res := do(t, mux, "GET", "/sub/skiptoken1/json", "", "")
+	if res.StatusCode != 200 {
+		t.Fatalf("sub json with broken inbound: status = %d, want 200", res.StatusCode)
 	}
 }
 

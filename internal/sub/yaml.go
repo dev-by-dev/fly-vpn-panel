@@ -33,8 +33,9 @@ func proxyParams(inbounds []store.Inbound, u store.User, entryIP string) (map[st
 			continue
 		}
 		p, err := inboundParams(in)
+		// One odd inbound must not 500 the whole subscription; RenderBase64 skips it the same way.
 		if err != nil {
-			return nil, err
+			continue
 		}
 		line := fmt.Sprintf(
 			"  - {name: %s, type: vless, server: %s, port: %d, uuid: %s, network: %s, tls: true, udp: true, servername: %s, client-fingerprint: %s, reality-opts: {public-key: %s, short-id: %s}",

@@ -110,5 +110,22 @@ KEEP_PACKAGES=false; PKGS=""
 PATH=$OLD_PATH
 rm -rf "$tmp/pk" "$tmp/stub" "$APT_LOG"
 
+# caddy_unit_is_ours must match only a unit running /usr/local/bin/caddy;
+# anything else — foreign path, unreadable, missing — is not ours.
+CADDY_UNIT=$tmp/caddy.service
+printf '[Service]\nExecStart=/usr/local/bin/caddy run --config /etc/caddy/Caddyfile\n' >"$CADDY_UNIT"
+check "our unit is ours" "caddy_unit_is_ours"
+printf '[Service]\nExecStart=/usr/bin/caddy run\n' >"$CADDY_UNIT"
+check "foreign unit is not ours" "! caddy_unit_is_ours"
+if [ "$(id -u)" -ne 0 ]; then
+  chmod 000 "$CADDY_UNIT"
+  check "unreadable unit is not ours" "! caddy_unit_is_ours"
+  chmod 644 "$CADDY_UNIT"
+fi
+CADDY_UNIT=$tmp/gone.service
+check "missing unit is not ours" "! caddy_unit_is_ours"
+CADDY_UNIT=/etc/systemd/system/caddy.service
+rm -f "$tmp/caddy.service"
+
 printf '%s failures\n' "$fails"
 [ "$fails" -eq 0 ]

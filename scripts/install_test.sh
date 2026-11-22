@@ -195,6 +195,43 @@ check "update runs apt-get upgrade" 1 "$(grep -c 'upgrade' "$UPD")"
   update_system >/dev/null 2>&1 )
 check "no-update skips the upgrade" 0 "$(grep -c . "$UPD")"
 
+# --- selinux step ------------------------------------------------------------
+# configure_selinux must not restart units (caddy.service does not exist yet
+# at that point; the restart aborts the install under set -e).
+SL=$WORK/selstub; SEL_LOG=$WORK/sel.log; : >"$SEL_LOG"
+mkdir -p "$SL"
+printf '#!/bin/sh\necho Enforcing\n' >"$SL/getenforce"
+printf '#!/bin/sh\necho "$@" >>"%s"\n' "$SEL_LOG" >"$SL/semanage"
+printf '#!/bin/sh\necho "$@" >>"%s"\n' "$SEL_LOG" >"$SL/systemctl"
+chmod +x "$SL"/*
+( export PATH="$SL:$PATH" FAMILY=dnf DRY_RUN=false ACCESS_PORT=8443
+  configure_selinux >/dev/null 2>&1 )
+check "selinux step issues no restart" 0 "$(grep -c restart "$SEL_LOG")"
+check "selinux step labels both ports" 2 "$(grep -c http_port_t "$SEL_LOG")"
+
+# --- collect_answers: no infinite loop on bad domain --------------------------
+# --yes returns the empty default instantly and non-tty stdin cannot re-ask:
+# collect_answers must die, not spin. Returns exit code, or 124 on hang.
+collect_answers_timeout() { # <seconds>
+  ( collect_answers </dev/null >/dev/null 2>&1 ) &
+  local pid=$! i
+  for i in $(seq 1 $(( $1 * 10 ))); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
+  if kill -0 "$pid" 2>/dev/null; then kill -9 "$pid"; wait "$pid" 2>/dev/null; return 124; fi
+  wait "$pid"
+}
+( export ASSUME_YES=true DOMAIN="" EMAIL=admin@example.com; collect_answers_timeout 3 )
+check "yes-mode empty domain dies" 1 "$?"
+( export ASSUME_YES=true DOMAIN="bad_domain.fly-io" EMAIL=admin@example.com; collect_answers_timeout 3 )
+check "yes-mode invalid domain dies" 1 "$?"
+( export ASSUME_YES=false DOMAIN="bad_domain.fly-io" EMAIL=admin@example.com; collect_answers_timeout 3 )
+check "non-tty invalid domain dies" 1 "$?"
+ASSUME_YES=false DOMAIN=""
+
+# --- install log mode ----------------------------------------------------------
+# summary() prints the admin password; umask 022 alone leaves the log 0644.
+( INSTALL_LOG="$WORK/open-log.log" open_install_log ) >/dev/null 2>&1
+check "install log created 600" 600 "$(stat -c %a "$WORK/open-log.log" 2>/dev/null || echo missing)"
+
 # --- https pending ----------------------------------------------------------
 LOCAL=200
 PUB=000
