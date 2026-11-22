@@ -34,6 +34,8 @@
 	let auto = $state(false);
 	let paused = $state(false);
 	let entries: Entry[] = $state([]);
+	// ISO-момент очистки: всё, что раньше, показывать не надо.
+	let clearedAt = $state('');
 	let error = $state('');
 	let loading = $state(false);
 
@@ -65,7 +67,15 @@
 				entries = [];
 				return;
 			}
-			entries = data.entries ?? [];
+			// После «Очистить» journald продолжает отдавать старые строки: режем их по времени очистки.
+			const cut = clearedAt ? Date.parse(clearedAt) : 0;
+			const all: Entry[] = data.entries ?? [];
+			entries = cut
+				? all.filter((e) => {
+						const at = Date.parse(e.time ?? '');
+						return !Number.isFinite(at) || at >= cut;
+					})
+				: all;
 		} catch {
 			error = t('common.network');
 		} finally {
@@ -75,12 +85,14 @@
 
 	function pickSource(s: Source) {
 		source = s;
+		clearedAt = '';
 		void loadLogs();
 	}
 
 	// Журнал systemd панели недоступен на запись: чистим экран, файл xray режем сами.
 	async function clearLogs() {
 		entries = [];
+		clearedAt = source === 'xray' ? '' : new Date().toISOString();
 		if (source !== 'xray') return;
 		try {
 			const res = await apiFetch('/api/monitoring/logs?source=xray', { method: 'DELETE' });

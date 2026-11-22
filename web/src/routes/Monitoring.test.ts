@@ -175,6 +175,24 @@ describe('monitoring page', () => {
     expect(screen.queryByText('boom')).toBeNull();
   });
 
+  test('после очистки журнала старые записи не возвращаются', async () => {
+    const entries = [
+      { time: '2020-01-01T00:00:00Z', source: 'server', level: 'err', message: 'old-line' },
+    ];
+    mockFetch(entries);
+    render(Monitoring);
+    await screen.findByText('old-line');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Очистить' }));
+    expect(screen.queryByText('old-line')).toBeNull();
+
+    entries.push({ time: '2099-01-01T00:00:00Z', source: 'server', level: 'info', message: 'new-line' });
+    await fireEvent.click(screen.getByRole('button', { name: 'Обновить' }));
+
+    expect(await screen.findByText('new-line')).toBeTruthy();
+    expect(screen.queryByText('old-line')).toBeNull();
+  });
+
   test('очистка журнала не удаляет записи на сервере', async () => {
     mockFetch([
       { time: '2026-11-22T10:00:00Z', source: 'server', level: 'err', message: 'boom' },
