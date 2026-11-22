@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -112,6 +113,51 @@ func TestManagerStartStop(t *testing.T) {
 		t.Fatalf("Stop() after Restart: %v", err)
 	}
 	processGone(t, st2.PID)
+	assertNoLeftovers(t, bin)
+}
+
+func TestManagerConcurrentRestart(t *testing.T) {
+	bin := fakeXray(t, "exec sleep 86400\n")
+	m := NewManager(bin, filepath.Join(filepath.Dir(bin), "config.json"))
+
+	if err := m.Start(); err != nil {
+		t.Fatalf("Start(): %v", err)
+	}
+
+	const n = 8
+	errCh := make(chan error, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			if i%4 == 3 {
+				errCh <- m.Start() // no-op, must not race
+			} else {
+				errCh <- m.Restart()
+			}
+		}(i)
+	}
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		if err != nil {
+			t.Fatalf("concurrent op: %v", err)
+		}
+	}
+
+	st := m.Status()
+	if !st.Running || st.PID <= 0 {
+		t.Fatalf("Status() after concurrent restarts = %+v, want running with a PID", st)
+	}
+	pid := st.PID
+	if err := m.Stop(); err != nil {
+		t.Fatalf("Stop(): %v", err)
+	}
+	if m.Status().Running {
+		t.Error("Status().Running after Stop = true, want false")
+	}
+	processGone(t, pid)
 	assertNoLeftovers(t, bin)
 }
 
