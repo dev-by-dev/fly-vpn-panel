@@ -95,7 +95,7 @@ func vlessClients(t *testing.T, doc any) []any {
 }
 
 func TestGenerateGolden(t *testing.T) {
-	got, err := GenerateConfig(testInbounds(), testUsers(), testRoutingJSON, testEgressIP, testAPIPort)
+	got, err := GenerateConfig(testInbounds(), testUsers(), testRoutingJSON, testEgressIP, testAPIPort, "")
 	if err != nil {
 		t.Fatalf("GenerateConfig(): %v", err)
 	}
@@ -115,7 +115,7 @@ func TestGenerateGolden(t *testing.T) {
 // when the JSON config carries a top-level "stats" object; policy stats
 // flags alone create no counters, so the poller would record nothing.
 func TestGenerateStatsObject(t *testing.T) {
-	cfg, err := GenerateConfig(testInbounds(), nil, "", "", testAPIPort)
+	cfg, err := GenerateConfig(testInbounds(), nil, "", "", testAPIPort, "")
 	if err != nil {
 		t.Fatalf("GenerateConfig(): %v", err)
 	}
@@ -137,7 +137,7 @@ func TestGenerateVlessDecryption(t *testing.T) {
 			"protocol": "dokodemo-door", "settings": {"address": "127.0.0.1"}
 		}`, CreatedAt: time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)},
 	}
-	cfg, err := GenerateConfig(inbounds, nil, "", "", testAPIPort)
+	cfg, err := GenerateConfig(inbounds, nil, "", "", testAPIPort, "")
 	if err != nil {
 		t.Fatalf("GenerateConfig(): %v", err)
 	}
@@ -159,7 +159,7 @@ func TestGenerateInjectsOnlyActive(t *testing.T) {
 		ID: 3, Username: "mallory", UUID: "33333333-3333-4333-8333-333333333333",
 		Disabled: true, DisabledReason: "banned", CreatedAt: time.Date(2026, 11, 3, 0, 0, 0, 0, time.UTC),
 	})
-	cfg, err := GenerateConfig(testInbounds(), users, "", "", testAPIPort)
+	cfg, err := GenerateConfig(testInbounds(), users, "", "", testAPIPort, "")
 	if err != nil {
 		t.Fatalf("GenerateConfig(): %v", err)
 	}
@@ -275,7 +275,7 @@ func TestGenerateAPIRoutingRule(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg, err := GenerateConfig(testInbounds(), nil, tt.routingJSON, "", testAPIPort)
+			cfg, err := GenerateConfig(testInbounds(), nil, tt.routingJSON, "", testAPIPort, "")
 			if err != nil {
 				t.Fatalf("GenerateConfig(): %v", err)
 			}
@@ -288,7 +288,7 @@ func TestGenerateNoSanitizer(t *testing.T) {
 	routing := `{"domainStrategy":"IPIfNonMatch","rules":[
 		{"type":"field","domain":["geosite:category-ads-all","domain:example.com"],"outboundTag":"block"},
 		{"type":"field","ip":["203.0.113.0/24","geoip:private"],"outboundTag":"block"}]}`
-	cfg, err := GenerateConfig(testInbounds(), nil, routing, "", testAPIPort)
+	cfg, err := GenerateConfig(testInbounds(), nil, routing, "", testAPIPort, "")
 	if err != nil {
 		t.Fatalf("GenerateConfig(): %v", err)
 	}
@@ -308,7 +308,7 @@ func TestGenerateNoSanitizer(t *testing.T) {
 }
 
 func TestGenerateEmptyRouting(t *testing.T) {
-	cfg, err := GenerateConfig(testInbounds(), nil, "", "", testAPIPort)
+	cfg, err := GenerateConfig(testInbounds(), nil, "", "", testAPIPort, "")
 	if err != nil {
 		t.Fatalf("GenerateConfig(): %v", err)
 	}
@@ -321,7 +321,7 @@ func TestGenerateEmptyRouting(t *testing.T) {
 }
 
 func TestGenerateBadRouting(t *testing.T) {
-	if _, err := GenerateConfig(testInbounds(), nil, "{not json", "", testAPIPort); err == nil {
+	if _, err := GenerateConfig(testInbounds(), nil, "{not json", "", testAPIPort, ""); err == nil {
 		t.Error("GenerateConfig(bad routing) = nil error, want error")
 	}
 }
@@ -330,13 +330,13 @@ func TestGenerateBadRouting(t *testing.T) {
 // nil error; parseRouting must reject it, otherwise ensureAPIRule
 // assigns into the nil map and panics.
 func TestGenerateNullRouting(t *testing.T) {
-	if _, err := GenerateConfig(testInbounds(), nil, "null", "", testAPIPort); err == nil {
+	if _, err := GenerateConfig(testInbounds(), nil, "null", "", testAPIPort, ""); err == nil {
 		t.Fatal("GenerateConfig(routing null) = nil error, want error (must be a JSON object)")
 	}
 }
 
 func TestGenerateNoEgress(t *testing.T) {
-	cfg, err := GenerateConfig(testInbounds(), nil, "", "", testAPIPort)
+	cfg, err := GenerateConfig(testInbounds(), nil, "", "", testAPIPort, "")
 	if err != nil {
 		t.Fatalf("GenerateConfig(): %v", err)
 	}
@@ -362,7 +362,7 @@ func TestValidateIntegration(t *testing.T) {
 	if bin == "" {
 		t.Skip("XRAY_BIN not set; skipping integration test with a real xray binary")
 	}
-	cfg, err := GenerateConfig(testInbounds(), testUsers(), testRoutingJSON, testEgressIP, testAPIPort)
+	cfg, err := GenerateConfig(testInbounds(), testUsers(), testRoutingJSON, testEgressIP, testAPIPort, "")
 	if err != nil {
 		t.Fatalf("GenerateConfig(): %v", err)
 	}
@@ -371,5 +371,27 @@ func TestValidateIntegration(t *testing.T) {
 	}
 	if err := Validate(bin, []byte("{not json")); err == nil {
 		t.Error("Validate(broken JSON) = nil, want error")
+	}
+}
+
+func TestConfigXrayErrorLogPath(t *testing.T) {
+	cfg, err := GenerateConfig(testInbounds(), nil, "", "", testAPIPort, "/opt/flypanel/data/xray-error.log")
+	if err != nil {
+		t.Fatalf("GenerateConfig(): %v", err)
+	}
+	var doc struct {
+		Log struct {
+			Loglevel string `json:"loglevel"`
+			Error    string `json:"error"`
+		} `json:"log"`
+	}
+	if err := json.Unmarshal(cfg, &doc); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if doc.Log.Error != "/opt/flypanel/data/xray-error.log" {
+		t.Errorf("log.error = %q, want the given path", doc.Log.Error)
+	}
+	if doc.Log.Loglevel != "warning" {
+		t.Errorf("log.loglevel = %q, want warning", doc.Log.Loglevel)
 	}
 }

@@ -16,7 +16,7 @@ const defaultRouting = `{"domainStrategy":"AsIs","rules":[]}`
 // stats policy, the dokodemo-door API inbound on 127.0.0.1:apiPort, every
 // enabled inbound with the non-disabled users injected as VLESS clients,
 // and freedom/blackhole outbounds. An empty egressIP omits sendThrough.
-func GenerateConfig(inbounds []store.Inbound, activeUsers []store.User, routingJSON, egressIP string, apiPort int) ([]byte, error) {
+func GenerateConfig(inbounds []store.Inbound, activeUsers []store.User, routingJSON, egressIP string, apiPort int, logPath string) ([]byte, error) {
 	routing, err := parseRouting(routingJSON)
 	if err != nil {
 		return nil, err
@@ -72,7 +72,7 @@ func GenerateConfig(inbounds []store.Inbound, activeUsers []store.User, routingJ
 	}
 
 	cfg := map[string]any{
-		"log": map[string]any{"loglevel": "warning"},
+		"log": logObject(logPath),
 		// xray-core only loads the app/stats manager when this object
 		// exists; policy stats flags alone create no counters.
 		"stats": map[string]any{},
@@ -151,4 +151,14 @@ func parseRouting(routingJSON string) (map[string]any, error) {
 		return nil, fmt.Errorf("routing: must be a JSON object")
 	}
 	return routing, nil
+}
+
+// logObject points xray errors at a file in DATA_DIR so they are readable
+// from the panel; loglevel stays warning to keep the file small.
+func logObject(path string) map[string]any {
+	obj := map[string]any{"loglevel": "warning"}
+	if path != "" {
+		obj["error"] = path
+	}
+	return obj
 }

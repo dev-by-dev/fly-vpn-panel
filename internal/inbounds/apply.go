@@ -4,6 +4,7 @@ package inbounds
 
 import (
 	"fmt"
+	"os"
 
 	"flypanel/internal/config"
 	"flypanel/internal/store"
@@ -35,6 +36,17 @@ func NewApplier(st *store.Store, cfg *config.Config, mgr *xray.Manager) *Applier
 	return &Applier{Store: st, Cfg: cfg, Mgr: mgr, Validate: xray.Validate}
 }
 
+// trimXrayLog clears the error log once it grows past 5 MB:
+// shortcut: rotation not needed, xray writes warning+ only.
+func (a *Applier) trimXrayLog() {
+	path := a.Cfg.DataDir + "/xray-error.log"
+	info, err := os.Stat(path)
+	if err != nil || info.Size() < 5<<20 {
+		return
+	}
+	_ = os.Truncate(path, 0)
+}
+
 // ConfigPath is the on-disk location of the generated xray config.
 func (a *Applier) ConfigPath() string { return a.Cfg.DataDir + "/xray.json" }
 
@@ -42,6 +54,7 @@ func (a *Applier) ConfigPath() string { return a.Cfg.DataDir + "/xray.json" }
 // ("" falls back to xray's default routing). Expiry/quota enforcement is
 // the users poller's job; here only the Disabled flag filters users.
 func (a *Applier) Apply(routingJSON string) error {
+	a.trimXrayLog()
 	inbounds, err := a.Store.InboundListEnabled()
 	if err != nil {
 		return err
@@ -56,7 +69,7 @@ func (a *Applier) Apply(routingJSON string) error {
 			active = append(active, u)
 		}
 	}
-	cfg, err := xray.GenerateConfig(inbounds, active, routingJSON, a.Cfg.EgressIP, apiPort)
+	cfg, err := xray.GenerateConfig(inbounds, active, routingJSON, a.Cfg.EgressIP, apiPort, a.Cfg.DataDir+"/xray-error.log")
 	if err != nil {
 		return err
 	}
