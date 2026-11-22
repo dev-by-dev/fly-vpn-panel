@@ -1,34 +1,34 @@
-# Меню «Inbounds» в верхней навигации
+# «Inbounds» menu in the top navigation
 
-## Задача
+## Task
 
-Два выпадающих меню (действия над инбаундами и метрики) висели в шапке самой
-страницы Inbounds. Нужно как в Remnawave: вкладка «Inbounds ▾» в верхней
-навигации, под ней пункты.
+Two dropdown menus (inbound actions and metrics) hung in the header of the
+Inbounds page itself. It needs to work like Remnawave: an «Inbounds ▾» tab in the
+top navigation, with items underneath.
 
-## Решение
+## Solution
 
-- `web/src/lib/inboundsIntent.svelte.ts` — общее состояние
-  `inboundsIntent = $state({ action: 'create' | 'metrics' | null })`: шапка
-  ставит намерение, страница применяет и сбрасывает.
-- `web/src/App.svelte` — вкладка «Inbounds» стала кнопкой с «▾» и панелью:
-  «Инбаунды» (переход на список), «Добавить inbound» (намерение `create`),
-  «Метрики» (намерение `metrics`). Активная вкладка подчёркивается так же, как
-  остальные.
-- `web/src/routes/Inbounds.svelte` — шапочные дропдауны удалены; секция
-  «Метрики» (`Инбаунды / Онлайн / Трафик` + ↑/↓ по каждому инбаунду, «Обновить»,
-  «Скрыть») открывается по намерению или скрывается вручную; намерение
-  `create` сразу открывает диалог нового инбаунда.
+- `web/src/lib/inboundsIntent.svelte.ts` — shared state
+  `inboundsIntent = $state({ action: 'create' | 'metrics' | null })`: the header
+  sets the intent, the page applies and resets it.
+- `web/src/App.svelte` — the «Inbounds» tab became a button with «▾» and a panel:
+  «Инбаунды» (navigates to the list), «Добавить inbound» (intent `create`),
+  «Метрики» (intent `metrics`). The active tab is underlined the same way as the
+  others.
+- `web/src/routes/Inbounds.svelte` — the header dropdowns were removed; the
+  «Метрики» section (`Инбаунды / Онлайн / Трафик` + ↑/↓ per inbound, «Обновить»,
+  «Скрыть») opens on intent or hides manually; the `create` intent opens the new
+  inbound dialog right away.
 
-## Проверка
+## Verification
 
-- `npm run check` — 0 ошибок / 12 старых предупреждений.
+- `npm run check` — 0 errors / 12 pre-existing warnings.
 - `npx vitest run` — 22/22.
-- Браузер: меню открывается, «Метрики» ведёт на `#/inbounds` и раскрывает
-  секцию (локально стаб xray → «Не удалось получить метрики (502)»),
-  «Добавить inbound» открывает «Новый inbound».
+- Browser: the menu opens, «Метрики» leads to `#/inbounds` and expands the
+  section (locally the xray stub → «Не удалось получить метрики (502)»),
+  «Добавить inbound» opens «Новый inbound».
 
-## Вне рамок
+## Out of scope
 
-- Метрики outbound-трафика и Prometheus.
-- Иконки в пунктах меню.
+- Outbound traffic metrics and Prometheus.
+- Icons in the menu items.

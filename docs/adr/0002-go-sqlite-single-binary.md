@@ -2,40 +2,40 @@
 
 **Date**: 2026-11-20
 **Status**: accepted
-**Deciders**: владелец продукта (Go — требование, SQLite — подтверждение) + агент-оператор
+**Deciders**: product owner (Go — requirement, SQLite — confirmation) + agent-operator
 
 ## Context
 
-Сервер с ограниченными ресурсами (~2 vCPU / ~4 GB RAM) уже занят действующим стеком. Хочется минимум сущностей и обслуживания: деплой = один файл. Прецедент 3x-ui = Go + SQLite + xray. Язык бэкенда задан пользователем (Go); БД делегирована («лёгкая и быстрая»).
+The server has limited resources (~2 vCPU / ~4 GB RAM) and is already occupied by the existing stack. We want a minimum of entities and maintenance: deploy = one file. Precedent 3x-ui = Go + SQLite + xray. The backend language was set by the user (Go); the DB was delegated ("lightweight and fast").
 
 ## Decision
 
-Один статический Go-бинарник `flypanel` (HTTP stdlib net/http, SPA через embed.FS) + **SQLite** (modernc.org/sqlite, pure Go; WAL + `_busy_timeout` + `_synchronous=FULL`) + бинарник xray рядом. Бэкап БД = копия файла.
+One static Go binary `flypanel` (HTTP via stdlib net/http, SPA through embed.FS) + **SQLite** (modernc.org/sqlite, pure Go; WAL + `_busy_timeout` + `_synchronous=FULL`) + the xray binary next to it. DB backup = a copy of the file.
 
 ## Alternatives Considered
 
 ### Alternative 1: PostgreSQL
-- **Pros**: многопользовательская запись, репликация, привычная экосистема.
-- **Cons**: +контейнер, +бэкапы, +RAM, +обслуживание; на одном сервере с одним писателем выигрыш нулевой.
-- **Why not**: сложность без выгоды до тысяч юзеров/мультиноды (non-goal v1). Действующая панель уже тянет postgres — не хотим повторять.
+- **Pros**: multi-writer, replication, familiar ecosystem.
+- **Cons**: +container, +backups, +RAM, +maintenance; on a single server with a single writer the gain is zero.
+- **Why not**: complexity with no benefit until thousands of users/multi-node (v1 non-goal). The existing panel already drags postgres along — we do not want to repeat that.
 
-### Alternative 2: Node / Rust / Python бэкенд
-- **Pros**: Node — единый язык с фронтом; Rust — производительность; Python — скорость разработки.
-- **Cons**: Node — тяжелее runtime; Rust — дольше разработка; Python — runtime + зависимости. Ни у кого нет нативного преимущества для xray gRPC API.
-- **Why not**: Go = статический бинарник, десятки МБ RAM, родной gRPC-клиент, требование пользователя.
+### Alternative 2: Node / Rust / Python backend
+- **Pros**: Node — one language with the frontend; Rust — performance; Python — development speed.
+- **Cons**: Node — heavier runtime; Rust — slower development; Python — runtime + dependencies. None has a native advantage for the xray gRPC API.
+- **Why not**: Go = static binary, tens of MB of RAM, native gRPC client, user requirement.
 
 ## Consequences
 
 ### Positive
-- Деплой = один файл (+ xray), RAM десятки МБ.
-- Бэкап/восстановление = копия файла, ноль обслуживания БД.
-- Нативный gRPC для xray StatsService/HandlerService.
+- Deploy = one file (+ xray), RAM in the tens of MB.
+- Backup/restore = a copy of the file, zero DB maintenance.
+- Native gRPC for xray StatsService/HandlerService.
 
 ### Negative
-- SQLite: один писатель (для одной панели достаточно).
-- Нет общей БД для мультиноды (non-goal v1).
-- pure-Go драйвер медленнее C-биндингов (нерелевантно при этой нагрузке).
+- SQLite: single writer (enough for one panel).
+- No shared DB for multi-node (v1 non-goal).
+- pure-Go driver is slower than C bindings (irrelevant at this load).
 
 ### Risks
-- Повреждение файла БД → ежедневный бэкап (7 копий) + WAL + `_synchronous=FULL`.
-- Конкурентная запись из нескольких горутин → один писатель + busy_timeout.
+- DB file corruption → daily backup (7 copies) + WAL + `_synchronous=FULL`.
+- Concurrent writes from several goroutines → single writer + busy_timeout.

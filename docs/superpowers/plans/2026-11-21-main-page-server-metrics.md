@@ -1,46 +1,46 @@
-# Главная: горизонтальные вкладки и метрики сервера
+# Main page: horizontal tabs and server metrics
 
-Дата: 2026-11-21
-Ветка: `main-page-20261121-03`
+Date: 2026-11-21
+Branch: `main-page-20261121-03`
 
-## Задача
+## Task
 
-Привести навигацию панели к виду Remnawave: горизонтальные вкладки в шапке,
-первая вкладка «Главная» показывает метрики самого хоста:
+Bring the panel navigation in line with Remnawave: horizontal tabs in the header,
+the first tab «Главная» shows the host's own metrics:
 
-- ЦПУ: занято/свободно,
-- ОЗУ: занято/свободно,
-- диск: свободно (и всего),
-- потреблено трафика.
+- CPU: used/free,
+- RAM: used/free,
+- disk: free (and total),
+- traffic consumed.
 
-## Решение
+## Solution
 
-- `web/src/App.svelte`: боковое меню заменено на шапку с логотипом, горизонтальными
-  вкладками (активная — подчёркивание) и кнопкой «Выйти». На узких экранах вкладки
-  скроллятся.
-- `web/src/routes/Dashboard.svelte` (маршрут `/`): заголовок «Главная», блок
-  «Сервер» из 4 карточек (ЦПУ, ОЗУ, диск, трафик), ниже прежние блоки под
-  заголовком «Трафик панели»: сводка, график, xray, онлайн-устройства.
-- Новый пакет `internal/host`: `Read(dataDir)` отдаёт CPU%/ядра из `/proc/stat`
-  (замер за 100 мс), память из `/proc/meminfo` (MemTotal/MemAvailable), диск
-  через `statfs` по `DATA_DIR`. На не-Linux (локальная разработка на macOS)
-  CPU/память = 0.
-- `GET /api/system` (`internal/api/system.go`) — под JWT-middleware, тело —
-  `host.Stats` в JSON.
-- Потреблённый трафик берётся из уже существующего `/api/stats/summary`
-  (сумма `up`+`down` по `traffic_samples`), новый счётчик не вводился.
+- `web/src/App.svelte`: the side menu replaced with a header with a logo, horizontal
+  tabs (the active one underlined) and a «Выйти» button. On narrow screens the tabs
+  scroll.
+- `web/src/routes/Dashboard.svelte` (route `/`): heading «Главная», a
+  «Сервер» block of 4 cards (CPU, RAM, disk, traffic), below it the previous blocks under
+  the heading «Трафик панели»: summary, chart, xray, online devices.
+- New package `internal/host`: `Read(dataDir)` returns CPU%/cores from `/proc/stat`
+  (100 ms sample), memory from `/proc/meminfo` (MemTotal/MemAvailable), disk
+  via `statfs` on `DATA_DIR`. On non-Linux (local development on macOS)
+  CPU/memory = 0.
+- `GET /api/system` (`internal/api/system.go`) — behind the JWT middleware, body is
+  `host.Stats` as JSON.
+- Consumed traffic is taken from the already existing `/api/stats/summary`
+  (sum of `up`+`down` over `traffic_samples`), no new counter was introduced.
 
-## Проверка
+## Verification
 
 - `go test ./internal/host ./internal/api`, `go vet`.
-- `npm run check` (0 ошибок), `npx vitest run` (22 теста).
-- Браузер (vite dev, 1440×900): горизонтальные вкладки с активной «Главная»,
-  карточки «Сервер» (ЦПУ, ОЗУ, диск, трафик), график и прежние блоки на месте.
-- На сервере Linux: `curl /api/system` возвращает ненулевые `mem_total`,
+- `npm run check` (0 errors), `npx vitest run` (22 tests).
+- Browser (vite dev, 1440×900): horizontal tabs with «Главная» active,
+  «Сервер» cards (CPU, RAM, disk, traffic), chart and previous blocks in place.
+- On the Linux server: `curl /api/system` returns non-zero `mem_total`,
   `mem_used`, `cpu_used_percent`.
 
-## Вне рамок
+## Out of scope
 
-- Иконки в карточках (в проекте нет icon-библиотеки).
-- Автообновление метрик по таймеру: обновление по кнопке «Обновить».
-- Метрики xray-процесса (Heap, Event Loop) из скриншота Remnawave.
+- Icons in the cards (the project has no icon library).
+- Auto-refresh of metrics on a timer: refresh via the «Обновить» button.
+- xray process metrics (Heap, Event Loop) from the Remnawave screenshot.

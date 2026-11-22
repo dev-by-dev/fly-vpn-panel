@@ -1,113 +1,113 @@
-# Мониторинг: логи сервера и метрики Caddy
+# Monitoring: server logs and Caddy metrics
 
-## Зачем
+## Why
 
-Панель управляет VPN и юзерами, но не показывает, что происходит на самом
-сервере: почему не открывается сайт, почему Caddy не обновил сертификат, что
-пишет xray, какой была нагрузка вчера. Всё это сейчас добывается только через
-ssh. Нужен один пункт меню, где видно логи трёх источников и история метрик
-Caddy — без Prometheus, Grafana и второго демона.
+The panel manages the VPN and users but does not show what is happening on the
+server: why a site does not open, why Caddy did not renew a certificate, what
+xray is writing, what the load was yesterday. Today all of that is obtained only via
+ssh. We need one menu item showing logs from three sources and the history of Caddy
+metrics — without Prometheus, Grafana or a second daemon.
 
-## Цели
+## Goals
 
-- Пункт «Мониторинг» в шапке с двумя видами: «Логи» и «Caddy».
-- «Логи»: три источника — сервер (весь journald), xray, Caddy. По 200 строк
-  по умолчанию (максимум 1000), время в локальной зоне, уровень, текст.
-- «Caddy»: графики RPS, ошибок в секунду, средней длительности запроса,
-  in-flight, RSS процесса, здоровья апстрима; периоды 1ч/6ч/24ч/7д.
-- Всё в трёх языках (ru/en/de), как остальная панель.
+- A “Monitoring” item in the header with two views: “Logs” and “Caddy”.
+- “Logs”: three sources — server (the whole journald), xray, Caddy. 200 lines
+  by default (max 1000), time in the local zone, level, text.
+- “Caddy”: charts for RPS, errors per second, average request duration,
+  in-flight, process RSS, upstream health; periods 1h/6h/24h/7d.
+- Everything in three languages (ru/en/de), like the rest of the panel.
 
-## Не-цели
+## Non-goals
 
-- Prometheus, Grafana, VictoriaMetrics, Loki — никаких новых демонов.
-- Алерты, уведомления, экспорт логов, поиск по логам.
-- TLS-метрики: Caddy их не отдаёт (открытый issue caddyserver/caddy#1683).
-- Мультисерверность: только тот хост, где запущена панель.
+- Prometheus, Grafana, VictoriaMetrics, Loki — no new daemons.
+- Alerts, notifications, log export, log search.
+- TLS metrics: Caddy does not expose them (open issue caddyserver/caddy#1683).
+- Multi-server: only the host where the panel runs.
 
-## Ограничения (проверено на fornex-vpn)
+## Constraints (verified on `<host>`)
 
-- Caddy v2.11.9, admin API на `127.0.0.1:2019`, `/metrics` уже отвечает 200,
-  но содержит только admin/config/upstream-метрики: без глобальной опции
-  `{ metrics }` HTTP-метрики запросов не собираются. Модуль есть, пересборка
-  не нужна.
-- Всё пишет в journald: Caddy (stderr), панель (stderr), xray (наследует
-  stderr панели — в журнале это строки `_EXE=/opt/flypanel/bin/flypanel`,
-  отличить их от строк панели нельзя).
-- Панель работает под `flypanel` и journald читать не может: в группе
-  `systemd-journal` его нет.
-- Access log Caddy по умолчанию выключен.
-- `ProtectSystem=strict` запрещает запись вне `/opt/flypanel`, чтению не мешает.
+- Caddy v2.11.9, admin API on `127.0.0.1:2019`, `/metrics` already answers 200,
+  but contains only admin/config/upstream metrics: without the global
+  `{ metrics }` option no HTTP request metrics are collected. The module is there, no
+  rebuild needed.
+- Everything writes to journald: Caddy (stderr), the panel (stderr), xray (inherits
+  the panel's stderr — in the journal those are lines with
+  `_EXE=/opt/flypanel/bin/flypanel`, indistinguishable from the panel's own lines).
+- The panel runs as `flypanel` and cannot read journald: it is not in the
+  `systemd-journal` group.
+- Caddy's access log is off by default.
+- `ProtectSystem=strict` forbids writes outside `/opt/flypanel`, reading is not affected.
 
-## Рассмотренные подходы
+## Approaches considered
 
-### Логи: как читать
+### Logs: how to read
 
-- **A. Группа `systemd-journal` + файл для xray** (выбран). journald читается
-  `journalctl -o json`; xray пишет в файл, потому что в журнале он неотличим
-  от панели.
-- B. Только файлы (Caddy `log` в файл, xray в файл, панель в файл) — логи
-  панели всё равно в journald, три разных формата и три ротации.
-- C. sudoers на `journalctl` — лишние права, отклонено.
+- **A. The `systemd-journal` group + a file for xray** (chosen). journald is read
+  with `journalctl -o json`; xray writes to a file because in the journal it is
+  indistinguishable from the panel.
+- B. Files only (Caddy `log` to a file, xray to a file, panel to a file) — the panel's logs
+  end up in journald anyway, three different formats and three rotations.
+- C. sudoers for `journalctl` — extra privileges, rejected.
 
-Доступ выдаётся не `usermod`, а `SupplementaryGroups=systemd-journal` в unit:
-декларативно, откат — удалить строку.
+Access is granted not with `usermod` but with `SupplementaryGroups=systemd-journal` in the unit:
+declarative, rollback is deleting the line.
 
-### Метрики: где хранить
+### Metrics: where to store
 
-- **A. Свой скрейп `/metrics` в sqlite** (выбран): ноль демонов, история 30
-  дней, графики на существующем uPlot.
-- B. VictoriaMetrics одним бинарником — нужен, только если понадобится PromQL.
-- C. Prometheus + Grafana — 300–600 МБ RAM ради шести графиков, отклонено.
+- **A. Our own scrape of `/metrics` into sqlite** (chosen): zero daemons, 30
+  days of history, charts on the existing uPlot.
+- B. VictoriaMetrics as a single binary — only needed if PromQL becomes necessary.
+- C. Prometheus + Grafana — 300–600 MB RAM for six charts, rejected.
 
-## Как это устроено
+## How it works
 
-### Сервер
+### Server
 
-1. `flypanel.service`: `SupplementaryGroups=systemd-journal`, рестарт панели.
-2. `/etc/caddy/Caddyfile`: глобальная опция `{ metrics }` и `log` в site-блоке
-   (вывод по умолчанию — stderr → journald). **Правку делает оператор руками
-   при деплое** (копия файла, `caddy reload`, при ошибке — откат копией), панель
-   `/etc/caddy` не трогает: под `ProtectSystem=strict` и без root она физически
-   не может, а привилегированный хелпер — отдельная подсистема. В
-   `docs/deploy-checklist.md` добавляется шаг; UI при отсутствии HTTP-метрик
-   показывает подсказку про `{ metrics }`.
-3. xray.json, который генерирует панель: `"log": {"loglevel": "warning",
-   "error": "<dataDir>/xray-error.log"}`. Файл обрезается при применении
-   конфига, если вырос больше 5 МБ (`shortcut: своя ротация не нужна, xray
-   пишет warning`).
+1. `flypanel.service`: `SupplementaryGroups=systemd-journal`, restart the panel.
+2. `/etc/caddy/Caddyfile`: the global `{ metrics }` option and `log` in the site block
+   (the default output is stderr → journald). **The operator makes this edit by hand
+   at deploy time** (copy the file, `caddy reload`, on error roll back from the copy); the panel
+   does not touch `/etc/caddy`: under `ProtectSystem=strict` and without root it physically
+   cannot, and a privileged helper is a separate subsystem. A step is added to
+   `docs/deploy-checklist.md`; when HTTP metrics are missing, the UI
+   shows a hint about `{ metrics }`.
+3. xray.json as generated by the panel: `"log": {"loglevel": "warning",
+   "error": "<dataDir>/xray-error.log"}`. The file is truncated when the config
+   is applied if it has grown past 5 MB (`shortcut: rotation not needed, xray
+   writes warning+ only`).
 
-### Бэкенд
+### Backend
 
-Новый пакет `internal/monitoring`:
+New package `internal/monitoring`:
 
 - `type Entry struct { Time time.Time; Source string; Level string; Message string }`
 - `type Reader struct { DataDir string; run func(name string, args ...string) ([]byte, error) }`
-  — `run` подменяется в тестах, в бою `exec.Command(...).Output()`.
+  — `run` is replaced in tests, in production `exec.Command(...).Output()`.
 - `Read(source string, lines int) ([]Entry, error)`:
   - `server` → `journalctl -o json -n <lines> --no-pager`;
   - `caddy` → `journalctl -u caddy -o json -n <lines> --no-pager`;
-  - `xray` → последние `lines` строк `<DataDir>/xray-error.log` (нет файла →
-    пустой список, не ошибка). Уровень — из префикса строки `[Warning]` /
-    `[Error]` / `[Info]` регуляркой, иначе `info`.
-  - journald: каждая строка — JSON, поля `__REALTIME_TIMESTAMP` (µs),
+  - `xray` → the last `lines` lines of `<DataDir>/xray-error.log` (no file →
+    an empty list, not an error). The level comes from the `[Warning]` /
+    `[Error]` / `[Info]` line prefix via a regexp, otherwise `info`.
+  - journald: every line is JSON, fields `__REALTIME_TIMESTAMP` (µs),
     `PRIORITY` (0–7 → `emerg|alert|crit|err|warning|notice|info|debug`),
-    `MESSAGE` (строка или массив байт), `SYSLOG_IDENTIFIER` (для колонки
-    источника). Строки, которые не парсятся, пропускаются.
-  - `lines` ограничивается 1..1000, по умолчанию 200.
+    `MESSAGE` (a string or a byte array), `SYSLOG_IDENTIFIER` (for the
+    source column). Lines that do not parse are skipped.
+  - `lines` is clamped to 1..1000, default 200.
 
-Скрейп метрик `internal/monitoring/caddy.go`:
+Metrics scrape `internal/monitoring/caddy.go`:
 
-- `Scrape(url string) (Sample, error)` — GET, парсинг текста Prometheus:
-  суммирует `caddy_http_requests_total`, `caddy_http_request_errors_total`,
+- `Scrape(url string) (Sample, error)` — GET, parsing of Prometheus text:
+  sums `caddy_http_requests_total`, `caddy_http_request_errors_total`,
   `caddy_http_requests_in_flight`, `caddy_http_request_duration_seconds_sum`
-  и `_count`, берёт `process_resident_memory_bytes` и минимум
-  `caddy_reverse_proxy_upstreams_healthy`. Остальные строки игнорируются.
+  and `_count`, takes `process_resident_memory_bytes` and the minimum
+  `caddy_reverse_proxy_upstreams_healthy`. Other lines are ignored.
 - `Sample{Requests, Errors, InFlight, DurationSum, DurationCount float64;
-  RSSBytes float64; UpstreamHealthy *bool}` — `nil`, когда метрики апстримов
-  нет (reverse_proxy не настроен или другая версия): в UI это «—», красный
-  только при явном `0`.
+  RSSBytes float64; UpstreamHealthy *bool}` — `nil` when there are no upstream
+  metrics (reverse_proxy not configured or a different version): the UI shows “—” and only
+  an explicit `0` is red.
 
-Хранение: миграция `0007_caddy_samples.sql`:
+Storage: migration `0007_caddy_samples.sql`:
 
 ```sql
 CREATE TABLE caddy_samples (
@@ -124,61 +124,63 @@ CREATE TABLE caddy_samples (
 CREATE INDEX idx_caddy_samples_ts ON caddy_samples(ts);
 ```
 
-`store.CaddySampleInsert(ts, sample)`, `store.CaddySamplesSince(since)` и
-`store.CaddySamplesPrune(before)`. Скрейп — отдельная горутина в `serve` раз в
-15 с, адрес из нового поля конфига `CaddyAdminURL` (env `CADDY_ADMIN_URL`,
-дефолт `http://127.0.0.1:2019`); каждый час удаление старше 30 дней. Ошибка
-скрейпа пишется в лог **только при смене состояния** (успех→провал и обратно),
-иначе недоступный Caddy залил бы журнал строкой каждые 15 секунд.
+`store.CaddySampleInsert(ts, sample)`, `store.CaddySamplesSince(since)` and
+`store.CaddySamplesPrune(before)`. The scrape is a separate goroutine in `serve` every
+15 s, the address comes from the new config field `CaddyAdminURL` (env `CADDY_ADMIN_URL`,
+default `http://127.0.0.1:2019`); every hour rows older than 30 days are deleted. A scrape
+error is logged **only on a state change** (success→failure and back),
+otherwise an unreachable Caddy would flood the journal with a line every 15 seconds.
 
 ### API
 
 - `GET /api/monitoring/logs?source=server|caddy|xray&lines=200` →
   `{"entries": [{"time": "...", "source": "caddy", "level": "info", "message": "..."}]}`.
-  Неизвестный source → 400 `invalid_source`; journald недоступен (нет группы,
-  нет `journalctl`) → 502 `journal_unavailable` + ключ `errors.journal_unavailable`
-  в трёх локалях, как `xray_unavailable`.
+  Unknown source → 400 `invalid_source`; journald unavailable (no group,
+  no `journalctl`) → 502 `journal_unavailable` + the key `errors.journal_unavailable`
+  in three locales, like `xray_unavailable`.
 - `GET /api/monitoring/caddy?range=1h|6h|24h|7d` →
   `{"points": [{"ts": "...", "rps": 0.0, "errors_per_s": 0.0, "avg_ms": 0.0,
   "inflight": 0.0, "rss": 0, "upstream_healthy": true}], "summary":
   {"requests": 0, "errors": 0, "avg_ms": 0.0, "inflight": 0.0, "rss": 0,
   "upstream_healthy": null}}`.
-  Считается на бэкенде по разностям между соседними сэмплами: сброс счётчика
-  (дельта < 0, Caddy перезапустился) даёт 0, а не отрицательный rate.
-  Точки агрегируются по интервалу: 15 с для `1h`, 60 с для `6h`/`24h`, 15 мин
-  для `7d` (не больше ~360 точек на график). Для первого интервала берётся один
-  сэмпл до `since`, чтобы не потерять дельту. `summary`: requests/errors — сумма
-  за период, `avg_ms` — по периоду, `inflight`/`rss`/`upstream_healthy` — из
-  последнего сэмпла.
-- Оба пути закрыты для read-токенов: в denylist middleware добавляется
-  `/api/monitoring` (как config и users).
+  Computed on the backend from the differences between neighbouring samples: a counter reset
+  (delta < 0, Caddy restarted) yields 0, not a negative rate.
+  Points are aggregated per interval: 15 s for `1h`, 60 s for `6h`/`24h`, 15 min
+  for `7d` (no more than ~360 points per chart). For the first interval one
+  sample before `since` is taken so the delta is not lost. `summary`: requests/errors — the sum
+  over the period, `avg_ms` — over the period, `inflight`/`rss`/`upstream_healthy` — from
+  the last sample.
+- `DELETE /api/monitoring/logs?source=xray` → 204, truncates the xray error log;
+  any other source → 400 `invalid_source` (journald belongs to the system, the panel only reads it).
+- Both paths are closed to read tokens: `/api/monitoring` is added to the middleware
+  denylist (like config and users).
 
-### Фронтенд
+### Frontend
 
-Один пункт меню «Мониторинг» (`nav.monitoring`) и два маршрута:
-`/monitoring/logs` (по умолчанию) и `/monitoring/caddy`; переключатель — две
-кнопки вверху страницы, как «Список / HWID» в Юзерах.
+One “Monitoring” menu item (`nav.monitoring`) and two routes:
+`/monitoring/logs` (default) and `/monitoring/caddy`; the switch is two
+buttons at the top of the page, like “List / HWID” in Users.
 
-«Логи»: три кнопки источника, «Обновить», чекбокс «Автообновление (5 с)»,
-моноширинный список строк `время · уровень · источник · текст`, цвет уровня
-(ошибки — красным, warning — жёлтым). Ошибка загрузки — текст с кодом,
-пустой ответ — «Записей нет».
+“Logs”: three source buttons, “Refresh”, an “Auto-refresh (5 s)” checkbox,
+a monospace list of `time · level · source · text` lines, level colour
+(errors red, warning yellow). A load error — a text with the code,
+an empty response — “No entries”.
 
-«Caddy»: кнопки периода 1ч/6ч/24ч/7д, карточки сводки (запросов всего,
-ошибок, средняя длительность, in-flight, RSS, апстрим), два графика uPlot:
-RPS + ошибки/с, средняя длительность (мс) + RSS (МБ). Нет данных → «Данных
-пока нет».
+“Caddy”: period buttons 1h/6h/24h/7d, summary cards (requests total,
+errors, average duration, in-flight, RSS, upstream), two uPlot charts:
+RPS + errors/s, average duration (ms) + RSS (MB). No data → “No data
+yet”.
 
-## Проверка
+## Verification
 
-- `go test ./...`: парсер journald JSON (строка, массив байт, битый JSON),
-  tail-чтение файла xray, парсер Prometheus-текста (счётчики, гистограммы,
-  отсутствующие метрики), rate с отрицательной дельтой, deny для read-токена.
-- vitest: английский язык на странице мониторинга, переключение источников
-  (три запроса с нужным `source`), рендер точек в графике при пустом ответе не
-  падает.
-- Ручная: на fornex-vpn после деплоя `journalctl -u caddy` совпадает с тем,
-  что показывает панель; `caddy_http_requests_total` растёт при обновлении
-  страницы панели (метрика включает запрос к panel2).
-- Регрессия: `make test`, `cd web && npx vitest run && npm run check`,
+- `go test ./...`: journald JSON parser (string, byte array, broken JSON),
+  xray file tail read, Prometheus text parser (counters, histograms,
+  missing metrics), rate with a negative delta, deny for a read token.
+- vitest: English on the monitoring page, switching sources
+  (three requests with the right `source`), rendering points on an empty response does not
+  crash.
+- Manual: on `<host>` after deploy, `journalctl -u caddy` matches what
+  the panel shows; `caddy_http_requests_total` grows when the panel page is
+  reloaded (the metric includes the request to `<PANEL_DOMAIN>`).
+- Regression: `make test`, `cd web && npx vitest run && npm run check`,
   `make build`.

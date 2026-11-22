@@ -1,66 +1,66 @@
-# API-токены и новая вёрстка Настроек — дизайн
+# API tokens and the new Settings layout — design
 
-## Зачем
+## Why
 
-Панель управляется только браузером: весь `/api/*` закрыт сессионной
-JWT-cookie `fp_access` (15 минут + refresh). Автоматизация (скрипты,
-мониторинг, CI) вынуждена логиниться паролем и держать cookie-сессию.
-Нужен способ дать внешнему клиенту долгоживущий ключ с ограниченными
-правами и возможностью отзыва — и увидеть это в «Настройках» так, как
-показано на макете: карточка «Токены API» с таблицей
-`НАЗВАНИЕ / ПРАВА / ИСТЕКАЕТ`, панелью обновить/«+» и меню «…».
+The panel is controlled from a browser only: the whole `/api/*` is closed by the session
+JWT cookie `fp_access` (15 minutes + refresh). Automation (scripts,
+monitoring, CI) is forced to log in with a password and keep a cookie session.
+We need a way to give an external client a long-lived key with limited
+rights and the ability to revoke it — and to see it in “Settings” the way the
+mockup shows: an “API tokens” card with a `Name / Scope / Expires` table,
+a refresh/“+” toolbar and a “…” menu.
 
-Заодно три существующие карточки Настроек (пароль, интервал поллинга,
-2FA) приводятся к тому же виду: иконка в скруглённом квадрате, заголовок
-+ подпись, единые отступы. Поведение этих трёх блоков не меняется.
+At the same time the three existing Settings cards (password, polling interval,
+2FA) are brought to the same look: an icon in a rounded square, a title
++ subtitle, uniform spacing. The behaviour of these three blocks does not change.
 
-## Цели
+## Goals
 
-- Создать токен в UI, увидеть его один раз, скопировать.
-- Список токенов: имя, права, срок; отзыв через «…».
-- Приём токена в API: `Authorization: Bearer fp_…` на любом `/api/*`.
-- Два права: `full` (все методы) и `read` (только GET).
-- Срок: 30 дней, 90 дней, бессрочно.
-- Cookie-аутентификация браузера работает как раньше, без изменений.
+- Create a token in the UI, see it once, copy it.
+- Token list: name, scope, expiry; revoke via “…”.
+- Token acceptance in the API: `Authorization: Bearer fp_…` on any `/api/*`.
+- Two scopes: `full` (all methods) and `read` (GET only).
+- Lifetime: 30 days, 90 days, unlimited.
+- Browser cookie authentication works as before, unchanged.
 
-## Не-цели (в этой ветке)
+## Non-goals (in this branch)
 
-- `last_used_at`, счётчики использования, лимиты на токен.
-- Токены с правами по конкретным разделам, токены на юзера VPN.
-- Мультиязычность (ru/en/de) — отдельная ветка после этой.
-- Изменение поведения смены пароля, поллинга, 2FA.
+- `last_used_at`, usage counters, per-token limits.
+- Tokens scoped to specific sections, tokens per VPN user.
+- Multi-language UI (ru/en/de) — a separate branch after this one.
+- Changing the behaviour of password change, polling, 2FA.
 
-## Анти-цели (считаем провалом)
+## Anti-goals (we count these as failure)
 
-- Хранение токена в открытом виде в БД или в логах.
-- Возможность показать токен повторно после создания.
-- Токен, которым нельзя отозвать доступ.
-- Регрессия: браузерная панель перестаёт работать из-за нового middleware.
+- Storing the token in plaintext in the DB or in the logs.
+- Any way to show the token again after creation.
+- A token whose access cannot be revoked.
+- Regression: the browser panel stops working because of the new middleware.
 
-## Рассмотренные варианты
+## Options considered
 
-**A. Отдельная таблица токенов, хеш + скоуп + срок, Bearer в middleware —
-выбрано.** Совпадает с уже существующим паттерном refresh-токенов
-(случайные 32 байта, в БД sha256 hex), отзыв и срок бесплатны,
-скоуп добавляет ~15 строк.
+**A. A separate tokens table, hash + scope + expiry, Bearer in the middleware —
+chosen.** It matches the existing refresh-token pattern
+(32 random bytes, sha256 hex in the DB), revocation and expiry come for free,
+the scope adds ~15 lines.
 
-**B. Выдать клиенту сам JWT-секрет / долгоживущий JWT.** Ноль нового
-кода, но отзыв невозможен, срок не выбирается, ключ один на всё.
-Отброшено.
+**B. Hand the client the JWT secret itself / a long-lived JWT.** Zero new
+code, but revocation is impossible, the lifetime is not selectable, one key for everything.
+Rejected.
 
-**C. OAuth2 client credentials.** Полноценный, но требует экрана
-согласия, хранения client_secret, скоупов по эндпоинтам — на порядок
-больше кода ради одного сценария. Отброшено.
+**C. OAuth2 client credentials.** Full-featured, but requires a consent screen,
+`client_secret` storage, per-endpoint scopes — an order of magnitude
+more code for a single scenario. Rejected.
 
-**D. Токены без скоупов (только full).** Проще на один select и одну
-проверку, но на макете есть колонка «ПРАВА», и read-only-токен —
-реальная потребность мониторинга. Оставлено два скоупа.
+**D. Tokens without scopes (full only).** One select and one check simpler,
+but the mockup has a “Scope” column, and a read-only token is
+a real monitoring need. Two scopes kept.
 
-## Как устроено
+## How it works
 
-### Хранение
+### Storage
 
-Миграция `internal/store/migrations/0006_api_tokens.sql`:
+Migration `internal/store/migrations/0006_api_tokens.sql`:
 
 ```sql
 CREATE TABLE IF NOT EXISTS api_tokens (
@@ -68,140 +68,140 @@ CREATE TABLE IF NOT EXISTS api_tokens (
   name       TEXT    NOT NULL,
   scope      TEXT    NOT NULL CHECK (scope IN ('full','read')),
   token_hash TEXT    NOT NULL UNIQUE,
-  expires_at TEXT    NOT NULL DEFAULT '',   -- '' = бессрочно
+  expires_at TEXT    NOT NULL DEFAULT '',   -- '' = never expires
   revoked    INTEGER NOT NULL DEFAULT 0,
   created_at TEXT    NOT NULL
 );
 ```
 
-Время — текст в том же формате, что у остальных таблиц (`fmtTime`).
-Слой доступа — `internal/store/api_tokens.go`: `APITokenInsert`,
-`APITokenList`, `APITokenByHash` (возвращает scope/expiry/revoked),
+Time is text in the same format as in the other tables (`fmtTime`).
+Access layer — `internal/store/api_tokens.go`: `APITokenInsert`,
+`APITokenList`, `APITokenByHash` (returns scope/expiry/revoked),
 `APITokenRevoke`.
 
-### Токен
+### Token
 
 `auth.IssueAPIToken() (raw, hash string, err error)`:
-32 случайных байта → `base64.RawURLEncoding`, префикс `fp_` у `raw`,
-`hash` = sha256 hex (тот же `hashToken`, что у refresh). Длина
-`raw` = 46 символов. Формат фиксирован: `fp_` + base64url.
+32 random bytes → `base64.RawURLEncoding`, the `fp_` prefix on `raw`,
+`hash` = sha256 hex (the same `hashToken` as for refresh). Length of
+`raw` = 46 characters. The format is fixed: `fp_` + base64url.
 
-### Проверка
+### Verification
 
-`auth.Middleware(j *JWT, tokens APITokenStore)` — сигнатура расширяется,
-`APITokenStore` — интерфейс `{ APITokenByHash(hash string) (APITokenInfo, bool, error) }`
-(`APITokenInfo{Scope string; ExpiresAt time.Time; Revoked bool}`), чтобы
-тесты подставляли фейк и `store` не тянулся в `auth`.
+`auth.Middleware(j *JWT, tokens APITokenStore)` — the signature grows,
+`APITokenStore` is the interface `{ APITokenByHash(hash string) (APITokenInfo, bool, error) }`
+(`APITokenInfo{Scope string; ExpiresAt time.Time; Revoked bool}`), so that
+tests can substitute a fake and `store` is not pulled into `auth`.
 
-Порядок: cookie `fp_access` → если валидна, пускаем (как сейчас);
-иначе заголовок `Authorization: Bearer fp_…` → хеш → поиск в БД →
-отказ при `revoked`, при истёкшем `expires_at`, при неизвестном хеше.
-Иначе 401 `{"error":"unauthorized"}` (текст не меняется).
+Order: cookie `fp_access` → if valid, let it through (as now);
+otherwise the `Authorization: Bearer fp_…` header → hash → lookup in the DB →
+reject on `revoked`, on an expired `expires_at`, on an unknown hash.
+Otherwise 401 `{"error":"unauthorized"}` (the text does not change).
 
-При успехе по токену со скоупом `read`: если метод не `GET` (и не
-`HEAD`) → 403 `{"error":"forbidden"}`. Проверка живёт в middleware,
-поэтому покрывает все мутирующие эндпоинты сразу; хендлеры не трогаем.
+On success with a `read`-scoped token: if the method is not `GET` (and not
+`HEAD`) → 403 `{"error":"forbidden"}`. The check lives in the middleware,
+so it covers every mutating endpoint at once; handlers are untouched.
 
-### Эндпоинты
+### Endpoints
 
 - `GET /api/tokens` → `[{id,name,scope,expires_at,revoked,created_at}]`,
-  без хешей. Сортировка: новые сверху.
+  without hashes. Sorting: newest first.
 - `POST /api/tokens` `{name,scope,expires_in_days}` → 201
-  `{id,name,scope,expires_at,token}`; `token` — единственный раз.
-  Валидация: `name` после trim 1–64 символа, `scope` ∈ {full,read},
-  `expires_in_days` ∈ {0,30,90} (0 = бессрочно). Ошибка → 400
+  `{id,name,scope,expires_at,token}`; `token` — the only time.
+  Validation: `name` after trim 1–64 characters, `scope` ∈ {full,read},
+  `expires_in_days` ∈ {0,30,90} (0 = never expires). Error → 400
   `{"error":"invalid_token_request"}`.
-- `DELETE /api/tokens/{id}` → 204; неизвестный или уже отозванный id → 404
-  `{"error":"not_found"}`. Повторный отзыв не идемпотентен: 404, чтобы UI
-  отличал «только что отозван» от «такого токена нет».
+- `DELETE /api/tokens/{id}` → 204; an unknown or already revoked id → 404
+  `{"error":"not_found"}`. Repeated revocation is not idempotent: 404, so the UI
+  can tell “just revoked” from “no such token”.
 
-Хендлеры — новый файл `internal/api/tokens.go`, тип `Handlers` уже несёт
+Handlers — a new file `internal/api/tokens.go`, the `Handlers` type already carries
 `Store`.
 
-### UI (Настройки)
+### UI (Settings)
 
-Страница `web/src/routes/Settings.svelte`, стиль по макету: карточка
-`rounded-2xl border bg-card`, шапка — иконка 40×40 в `rounded-xl
-bg-…/10` + `h2` + подпись `text-sm text-muted-foreground`, разделитель,
-тело, при наличии действий — нижняя панель с кнопкой-иконкой
-«Обновить» слева и primary «+» справа.
+Page `web/src/routes/Settings.svelte`, styled per the mockup: card
+`rounded-2xl border bg-card`, header — a 40×40 icon in `rounded-xl
+bg-…/10` + `h2` + a `text-sm text-muted-foreground` subtitle, a divider,
+the body, and where there are actions — a bottom bar with an icon button
+“Refresh” on the left and a primary “+” on the right.
 
-Секции в порядке: Токены API → Двухфакторная аутентификация → Смена
-пароля → Интервал поллинга.
+Sections in order: API tokens → Two-factor authentication → Password
+change → Polling interval.
 
-Токены API:
-- таблица: колонки `НАЗВАНИЕ`, `ПРАВА`, `ИСТЕКАЕТ`, последняя колонка —
-  кнопка «…»; зелёная точка у активного, серая/красная — у истёкшего и
-  отозванного; права `full` → «Полный доступ», `read` → «Чтение»;
-  срок пустой → «Бессрочно», иначе `dd.MM.yyyy`;
-- «+» раскрывает инлайн-форму: имя, права (select), срок (select
-  30/90/бессрочно) → «Создать»; после успеха форма заменяется блоком
-  «Токен создан, скопируй сейчас»: `code` с токеном + «Копировать»;
-- «…» → «Отозвать» (подтверждение через `confirm()` не делаем:
-  отзыв помечает строку, данные не теряются);
-- «Обновить» перезапрашивает список;
-- пустой список → «Пока нет токенов».
+API tokens:
+- table: columns `Name`, `Scope`, `Expires`, the last column is the
+  “…” button; a green dot for an active token, grey/red for an expired and a
+  revoked one; scope `full` → “Full access”, `read` → “Read only”;
+  an empty expiry → “Never expires”, otherwise `dd.MM.yyyy`;
+- “+” expands an inline form: name, scope (select), lifetime (select
+  30/90/never) → “Create”; after success the form is replaced by a
+  “The token is shown once — save it now.” block: a `code` with the token + “Copy”;
+- “…” → “Revoke” (no `confirm()` dialog: revocation marks the row,
+  no data is lost);
+- “Refresh” re-fetches the list;
+- an empty list → “No tokens yet.”.
 
-Сообщения: `Не удалось загрузить (${status})`, `Сеть недоступна`,
-`Токен создан`, `Токен отозван`, `Ошибка (${status})`.
+Messages: `Failed to load (${status})`, `Network unavailable`,
+`Token created`, `Token revoked`, `Error (${status})`.
 
-## Что решено (и почему)
+## What was decided (and why)
 
-- Bearer-заголовок, не query-параметр: токен не попадает в логи прокси.
-- Хеш sha256, а не bcrypt: токен высокоэнтропийный, перебор не нужен,
-  сравнение дешевле — тот же довод, что у refresh-токенов.
-- Скоуп проверяется в middleware, а не в каждом хендлере: одна точка,
-  нельзя забыть в новом эндпоинте.
-- Отозванная строка остаётся в таблице: видно историю, отзыв
-  идемпотентен.
-- Префикс `fp_`: токен узнаваем в логах/конфигах, легче искать утечки.
+- A Bearer header, not a query parameter: the token does not end up in proxy logs.
+- sha256 hash, not bcrypt: the token is high-entropy, brute force is not a concern,
+  comparison is cheaper — the same argument as for refresh tokens.
+- The scope is checked in the middleware, not in every handler: one place,
+  impossible to forget in a new endpoint.
+- A revoked row stays in the table: history is visible, revocation
+  is idempotent.
+- The `fp_` prefix: the token is recognizable in logs/configs, leaks are easier to find.
 
-## Правки после ревью спеки
+## Fixes after spec review
 
-Три дыры, найденные на ревью, закрываются в этой же ветке:
+Three holes found in review are closed in the same branch:
 
-1. **`read` не даёт читать секреты.** `GET /api/config` отдаёт
-   `xray.json` целиком (приватные ключи), `GET /api/users` — `uuid` и
-   `sub_token` каждого юзера, то есть токен мониторинга превращался в
-   кражу доступов. Для токенов со скоупом `read` дополнительный
-   deny-список путей: `/api/config`, `/api/config/routing`, всё под
-   `/api/users` → 403 `forbidden`. Остальное (`stats/*`, `xray/status`,
-   `system`, `devices`, метрики инбаундов) — читается.
-2. **Токеном нельзя управлять аутентификацией и токенами.** На
-   `/api/auth/*` (включая смену пароля и отключение 2FA) и на всём
-   `/api/tokens` (включая `GET`) Bearer не принимается вообще: только
-   cookie-сессия, иначе 401. Иначе утёкший токен мог снять 2FA,
-   сменить пароль или выписать себе новый токен — это ломает саму
-   идею отзыва.
-3. **Смена пароля отзывает и API-токены.** Смена хэша пароля и отзыв
-   refresh- и API-токенов идут одной транзакцией
-   (`AdminUpdatePasswordAndRevokeTokens`), чтобы сообщение «все сессии
-   отозваны» было правдой даже при сбое посередине.
+1. **`read` does not grant access to secrets.** `GET /api/config` returns the
+   whole `xray.json` (private keys), `GET /api/users` — `uuid` and
+   `sub_token` of every user, so a monitoring token turned into
+   credential theft. For `read` tokens an extra deny list of paths: `/api/config*`,
+   `/api/inbounds*` (except `/api/inbounds/metrics`), `/api/users*`,
+   `/api/monitoring*` → 403 `forbidden`. Everything else (`stats/*`, `xray/status`,
+   `system`, `devices`, inbound metrics) is readable.
+2. **A token cannot manage authentication and tokens.** On
+   `/api/auth/*` (including password change and 2FA disable) and on the whole
+   `/api/tokens` (including `GET`) Bearer is not accepted at all: cookie session
+   only, otherwise 401. Otherwise a leaked token could disable 2FA,
+   change the password or issue itself a new token — which breaks the very
+   idea of revocation.
+3. **Password change revokes API tokens too.** Changing the password hash and revoking
+   refresh and API tokens happen in one transaction
+   (`AdminUpdatePasswordAndRevokeTokens`), so the message “all sessions
+   revoked” is true even if something fails halfway.
 
-## Оставлено исполнителю
+## Left to the implementer
 
-- Точные имена Go-функций слоя store и формат `expires_at` — по образцу
-  соседних файлов.
-- Разметка таблицы и класса иконок — по образцу существующих карточек,
-  чтобы не завести второй визуальный язык.
-- Нужны ли отдельные стили для `select` (в проекте нет UI-примитива
-  select) — нативный `<select>` с классами `Input`.
+- The exact names of the store layer's Go functions and the `expires_at` format — following the
+  neighbouring files.
+- Table markup and icon classes — following the existing cards,
+  so as not to introduce a second visual language.
+- Whether separate styles are needed for `select` (the project has no UI primitive
+  for select) — a native `<select>` with the `Input` classes.
 
-## Проверка
+## Verification
 
-- Go: тесты store (insert/list/by-hash/revoke, истёкший и отозванный,
-  `APITokenRevokeAll`), тесты хендлеров (create 201 + токен один раз,
-  list без хешей, delete 204/404, валидация 400), тесты middleware
-  (cookie, валидный Bearer, read + POST → 403, read +
-  `/api/config` и `/api/users` → 403, Bearer на `/api/auth/*` и
-  `POST /api/tokens` → 401, отозванный → 401, истёкший → 401),
-  тест `ChangePassword` — после смены пароля и токены, и refresh
-  отозваны.
-- Web: `Settings.test.ts` — список рендерится, «+» создаёт токен и
-  показывает его, «Отозвать» шлёт DELETE и обновляет строку, ошибка
-  загрузки показывается и не ломает остальные секции.
-- E2E вручную: создать токен в панели → `curl -H "Authorization: Bearer
-  fp_…" https://panel2.kindzaza.site/api/users` → 200; тот же токен на
-  `POST /api/users` → 403; после «Отозвать» → 401.
-- Регресс: браузерная панель после входа работает (cookie-путь не
-  задет), `make test`, `cd web && npx vitest run`.
+- Go: store tests (insert/list/by-hash/revoke, expired and revoked,
+  `APITokenRevokeAll`), handler tests (create 201 + token shown once,
+  list without hashes, delete 204/404, validation 400), middleware tests
+  (cookie, a valid Bearer, read + POST → 403, read +
+  `/api/config` and `/api/users` → 403, Bearer on `/api/auth/*` and
+  `POST /api/tokens` → 401, revoked → 401, expired → 401),
+  a `ChangePassword` test — after a password change both the tokens and refresh
+  tokens are revoked.
+- Web: `Settings.test.ts` — the list renders, “+” creates a token and
+  shows it, “Revoke” sends the DELETE and updates the row, a load error
+  is shown and does not break the other sections.
+- E2E manually: create a `full` token in the panel → `curl -H "Authorization: Bearer
+  fp_…" https://panel.example.org/api/users` → 200; with a `read` token the same
+  request → 403, and `POST /api/users` → 403; after “Revoke” → 401.
+- Regression: the browser panel works after login (the cookie path is not
+  affected), `make test`, `cd web && npx vitest run`.

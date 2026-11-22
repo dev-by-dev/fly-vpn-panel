@@ -2,39 +2,39 @@
 
 **Date**: 2026-11-20
 **Status**: accepted
-**Deciders**: владелец продукта (гибрид принят) + агент-оператор (реализация через API)
+**Deciders**: product owner (hybrid accepted) + agent-operator (implementation via API)
 
 ## Context
 
-Главная боль действующей панели — неинформативна: непонятно, кто подключён и сколько трафика потребляет. xray stats keyed по юзеру (uuid), не по устройству; за NAT один IP на весь роутер. Нужна видимость без ненадёжных эвристик.
+The main pain of the existing panel is that it is uninformative: it is unclear who is connected and how much traffic they consume. xray stats are keyed by user (uuid), not by device; behind NAT one IP covers a whole router. We need visibility without unreliable heuristics.
 
 ## Decision
 
-Гибрид **чисто через xray gRPC StatsService**: `QueryStats` per-user uplink/downlink → дельты в SQLite → агрегаты день/неделя/месяц; `GetAllOnlineUsers` + `GetStatsOnlineIpList` → онлайн-IP + last-seen по юзеру. Поллинг 30 с. «Устройство» = distinct source IP (NAT-оговорка в UI). Парсинг access log НЕ нужен.
+Hybrid **purely via the xray gRPC StatsService**: `QueryStats` per-user uplink/downlink → deltas in SQLite → day/week/month aggregates; `GetAllOnlineUsers` + `GetStatsOnlineIpList` → online IPs + last-seen per user. Polling every 30 s. "Device" = distinct source IP (NAT caveat in the UI). Parsing the access log is NOT needed.
 
 ## Alternatives Considered
 
-### Alternative 1: per-device трафик
-- **Pros**: точная картина по устройствам.
-- **Cons**: xray не атрибутирует трафик по устройствам (только uuid); за NAT ненадёжно.
-- **Why not**: технически не сделать надёжно — не обещаем.
+### Alternative 1: per-device traffic
+- **Pros**: an accurate per-device picture.
+- **Cons**: xray does not attribute traffic per device (uuid only); unreliable behind NAT.
+- **Why not**: it cannot be done reliably — we do not promise it.
 
-### Alternative 2: парсинг access log xray
-- **Pros**: работает даже если stats API не даст онлайн-IP.
-- **Cons**: сложнее (парсер, ротация логов), дублирует то, что API уже отдаёт.
-- **Why not**: ресёрч 20.11.2026 показал GetStatsOnlineIpList/GetAllOnlineUsers в xray — API покрывает задачу. Оставлен как fallback только если семантика методов не подтвердится.
+### Alternative 2: parsing the xray access log
+- **Pros**: works even if the stats API does not return online IPs.
+- **Cons**: more complex (parser, log rotation), duplicates what the API already provides.
+- **Why not**: research on 20.11.2026 showed GetStatsOnlineIpList/GetAllOnlineUsers in xray — the API covers the task. Kept as a fallback only if the method semantics are not confirmed.
 
 ## Consequences
 
 ### Positive
-- Чистая реализация только на API, без файловых парсеров.
-- Живой список онлайн-устройств + графики трафика по юзерам.
+- Clean implementation on the API only, no file parsers.
+- Live list of online devices + per-user traffic graphs.
 
 ### Negative
-- «Устройство» = distinct IP: один роутер = одно устройство (NAT-оговорка).
-- Семантику онлайн-методов нужно проверить на пиннутом релизе xray при имплементации.
+- "Device" = distinct IP: one router = one device (NAT caveat).
+- The semantics of the online methods must be checked against the pinned xray release during implementation.
 
 ### Risks
-- API не отдаёт IP в нужном виде → fallback на access-log (только тогда).
-- Счётчики сбрасываются при рестарте xray → дельты фиксируются каждые 30 с, потеря ≤ интервала.
-- policy statsUserOnline=false → онлайн-IP не собираются; в конфиге принудительно true.
+- The API does not return the IP in the required form → fall back to access-log (only then).
+- Counters reset on xray restart → deltas are recorded every 30 s, loss ≤ the interval.
+- policy statsUserOnline=false → online IPs are not collected; forced to true in the config.

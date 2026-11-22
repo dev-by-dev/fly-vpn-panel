@@ -2,38 +2,38 @@
 
 **Date**: 2026-11-20
 **Status**: accepted
-**Deciders**: владелец продукта (директива 20.11.2026) + агент-оператор
+**Deciders**: product owner (directive 20.11.2026) + agent-operator
 
 ## Context
 
-Репозиторий публичный и будет пушиться в public GitHub. Черновой дизайн-док содержал реальные IP, домены, алиасы серверов, имена пользователей и пути к секретам. Публикация таких данных раскрывает инфраструктуру оператора.
+The repository is public and will be pushed to public GitHub. The draft design doc contained real IPs, domains, server aliases, user names and paths to secrets. Publishing such data exposes the operator's infrastructure.
 
 ## Decision
 
-Все артефакты репо (доки, код, комментарии, фикстуры, тесты, история git) **обезличены**: никаких реальных адресов, имён, алиасов серверов/провайдеров, путей к секретам, деталей клиентской сети. Плейсхолдеры: `<ENTRY_IP>`, `<PANEL_DOMAIN>`, `<EGRESS_IP>` (опциональный). Реальные значения живут только на сервере (`/opt/flypanel/.env`, chmod 600, gitignored) и в приватном runbook оператора вне репо.
+All repo artifacts (docs, code, comments, fixtures, tests, git history) are **anonymized**: no real addresses, names, server/provider aliases, paths to secrets, or details of the client network. Placeholders: `<ENTRY_IP>`, `<PANEL_DOMAIN>`, `<EGRESS_IP>` (optional). Real values live only on the server (`/opt/flypanel/.env`, chmod 600, gitignored) and in the operator's private runbook outside the repo.
 
 ## Alternatives Considered
 
-### Alternative 1: приватный репо
-- **Pros**: можно писать реальные значения.
-- **Cons**: не соответствует намерению владельца (публичный проект).
-- **Why not**: пользователь явно хочет public.
+### Alternative 1: private repo
+- **Pros**: real values can be written.
+- **Cons**: does not match the owner's intent (public project).
+- **Why not**: the user explicitly wants public.
 
-### Alternative 2: отдельный приватный репо для чувствительных доков
-- **Pros**: публичный код + приватные детали.
-- **Cons**: два источника правды, дрейф, сложнее сопровождать.
-- **Why not**: один публичный репо + серверный конфиг + приватный runbook проще и без дрейфа.
+### Alternative 2: separate private repo for sensitive docs
+- **Pros**: public code + private details.
+- **Cons**: two sources of truth, drift, harder to maintain.
+- **Why not**: one public repo + server config + private runbook is simpler and drift-free.
 
 ## Consequences
 
 ### Positive
-- Безопасно публиковать; builder работает от плейсхолдеров.
-- Секреты и топология не утекают в историю git.
+- Safe to publish; the builder works from placeholders.
+- Secrets and topology do not leak into git history.
 
 ### Negative
-- Деплой-runbook с реальными значениями живёт вне репо (приватный журнал).
-- Доки нельзя copy-paste-запустить без значений оператора.
+- The deploy runbook with real values lives outside the repo (private journal).
+- Docs cannot be copy-paste-run without the operator's values.
 
 ### Risks
-- Черновой коммит с реальными данными уже в локальной истории → перезаписать ДО первого push (amend неподвинутого коммита).
-- Случайная утечка в будущем коде/тестах → проверка обезличивания перед каждым push (§9 дизайн-дока), .gitignore на .env/data/*.db.
+- A draft commit with real data is already in the local history → rewrite BEFORE the first push (amend the unpushed commit).
+- Accidental leak in future code/tests → anonymization check before every push (design doc §9), .gitignore on .env/data/*.db.

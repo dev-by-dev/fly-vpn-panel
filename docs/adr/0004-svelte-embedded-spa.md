@@ -2,38 +2,38 @@
 
 **Date**: 2026-11-20
 **Status**: accepted
-**Deciders**: агент-оператор (выбор делегирован владельцем продукта)
+**Deciders**: agent-operator (choice delegated by the product owner)
 
 ## Context
 
-Фронтенд должен быть «лёгкий, лаконичный, красивый, современный, возможно на хайпе» (требование пользователя, выбор делегирован). Деплой обязан остаться одним файлом. Тёмная тема в духе Remnawave. SSR не нужен — панель за auth, один админ.
+The frontend must be "lightweight, concise, beautiful, modern, possibly hyped" (user requirement, choice delegated). Deploy must stay one file. Dark theme in the spirit of Remnawave. No SSR needed — the panel is behind auth, single admin.
 
 ## Decision
 
-**Svelte 5 (runes) + Vite + Tailwind CSS v4 + shadcn-svelte**; SPA собирается и вшивается в Go-бинарник через `embed.FS`. Проверенный совместимый набор версий: Svelte 5.59, Vite 8.3.8, vite-plugin-svelte 7.3.1, Tailwind 4.3.5, shadcn-svelte 1.8.1 (≥1.0 = только Svelte 5 + TW4). Node ≥20.19/22.12 только на машине сборки.
+**Svelte 5 (runes) + Vite + Tailwind CSS v4 + shadcn-svelte**; the SPA is built and embedded into the Go binary via `embed.FS`. Verified compatible version set: Svelte 5.59, Vite 8.3.8, vite-plugin-svelte 7.3.1, Tailwind 4.3.5, shadcn-svelte 1.8.1 (≥1.0 = Svelte 5 + TW4 only). Node ≥20.19/22.12 on the build machine only.
 
 ## Alternatives Considered
 
 ### Alternative 1: React / Next.js
-- **Pros**: крупнейшая экосистема, больше готовых компонентов.
-- **Cons**: тяжелее бандл и runtime; Next SSR не нужен (один админ за auth).
-- **Why not**: лишний вес без выгоды для этой задачи.
+- **Pros**: largest ecosystem, more ready-made components.
+- **Cons**: heavier bundle and runtime; Next SSR is unnecessary (one admin behind auth).
+- **Why not**: extra weight with no benefit for this task.
 
-### Alternative 2: серверные шаблоны (html/template + htmx)
-- **Pros**: ноль JS-сборки, ещё легче.
-- **Cons**: не «красиво/современно» по требованию; интерактивные графики/редакторы делать сложнее.
-- **Why not**: не соответствует явному требованию к внешнему виду.
+### Alternative 2: server templates (html/template + htmx)
+- **Pros**: zero JS build, even lighter.
+- **Cons**: not "beautiful/modern" per the requirement; interactive charts/editors are harder to build.
+- **Why not**: does not match the explicit appearance requirement.
 
 ## Consequences
 
 ### Positive
-- Лёгкий бандл, нет node-runtime на сервере, деплой = один файл.
-- Современный DX (runes), готовые компоненты shadcn-svelte, тёмная тема из коробки.
+- Light bundle, no node runtime on the server, deploy = one file.
+- Modern DX (runes), ready-made shadcn-svelte components, dark theme out of the box.
 
 ### Negative
-- Экосистема Svelte меньше React (нишевые либы искать дольше).
-- Версии нужно пинить (набор проверен, но npm уплывает).
+- Svelte ecosystem is smaller than React (niche libs take longer to find).
+- Versions must be pinned (the set is verified, but npm drifts).
 
 ### Risks
-- Несовместимость версий при установке → пин проверенного набора при старте имплементации.
-- Тяжёлые график-либы раздуют бандл → выбор лёгкой либы за билдером, без дашборд-фреймворков.
+- Version incompatibility during install → pin the verified set at implementation start.
+- Heavy chart libs will bloat the bundle → the builder picks a light lib, no dashboard frameworks.

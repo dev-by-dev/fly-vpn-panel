@@ -1,23 +1,23 @@
-# Видимые полосы прокрутки
+# Visible scrollbars
 
-## Задача
+## Task
 
-На macOS оверлейные полосы прокрутки не видны, пока страницу не начнёшь
-прокручивать, поэтому панель выглядела как «страница не двигается». Нужны
-постоянно видимые полосы.
+On macOS overlay scrollbars are not visible until you start scrolling the page,
+so the panel looked like "the page doesn't move". Constantly visible scrollbars
+are needed.
 
-## Решение
+## Solution
 
-В `web/src/app.css`, `@layer base`: стилизация `::-webkit-scrollbar`
-(10 px, тёмный ползунок, прозрачный трек). Свойство `scrollbar-width`
-намеренно не задаётся: в Chrome оно перебивает `::-webkit-scrollbar`, и
-браузер снова остаётся с оверлейными полосами.
+In `web/src/app.css`, `@layer base`: styling for `::-webkit-scrollbar`
+(10 px, dark thumb, transparent track). The `scrollbar-width` property is
+deliberately not set: in Chrome it overrides `::-webkit-scrollbar` and the
+browser goes back to overlay scrollbars.
 
-## Проверка
+## Verification
 
-- Chromium, 1366 px: `innerWidth - documentElement.clientWidth = 10` — полоса
-  занимает место и видна на скриншоте.
+- Chromium, 1366 px: `innerWidth - documentElement.clientWidth = 10` — the bar
+  takes up space and is visible in the screenshot.
 
-## Вне рамок
+## Out of scope
 
-- Firefox: `scrollbar-width/color` не добавлены, чтобы не сломать Chrome.
+- Firefox: `scrollbar-width/color` not added so as not to break Chrome.

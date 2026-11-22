@@ -1,40 +1,40 @@
 # ADR-0001: VPN topology — Reality on dedicated port, UI behind own Caddy
 
 **Date**: 2026-11-20
-**Status**: accepted (amended 2026-11-20 by ADR-0008: выделенная VPS → Caddy собственный нативный)
-**Deciders**: владелец продукта (выбор A) + агент-оператор
+**Status**: accepted (amended 2026-11-20 by ADR-0008: dedicated VPS → native own Caddy)
+**Deciders**: product owner (choice A) + agent-operator
 
 ## Context
 
-Исходный план: сосуществование с действующим VPN-стеком на одном сервере (общий Caddy 80/443, reload рвёт все соединения). Хочется полный контроль над xray-конфигом без прослойки. Размещение затем изменено на выделенную VPS (ADR-0008) — Caddy стал собственным, но топология «Reality отдельно, UI за прокси» сохранена.
+Initial plan: coexist with the existing VPN stack on one server (shared Caddy on 80/443, reload drops all connections). We want full control over the xray config with no intermediary layer. Placement was later changed to a dedicated VPS (ADR-0008) — Caddy became our own, but the topology "Reality separate, UI behind proxy" was kept.
 
 ## Decision
 
-Топология A: VPN = VLESS + XHTTP + **Reality на выделенном порту** (дефолт 8443), xray сам терминирует TLS — домен/сертификат для VPN не нужны. UI и подписки — за собственным Caddy (нативная установка, ADR-0008) на поддомене `<PANEL_DOMAIN>`, блок `reverse_proxy 127.0.0.1:3002`. Вход VPN — `<ENTRY_IP>`; `sendThrough <EGRESS_IP>` только если задан отдельный egress-IP (на выделенной VPS один IP — поле опущено).
+Topology A: VPN = VLESS + XHTTP + **Reality on a dedicated port** (default 8443), xray terminates TLS itself — no domain/certificate needed for the VPN. UI and subscriptions — behind our own Caddy (native install, ADR-0008) on the `<PANEL_DOMAIN>` subdomain, block `reverse_proxy 127.0.0.1:3002`. VPN entry — `<ENTRY_IP>`; `sendThrough <EGRESS_IP>` only if a separate egress IP is set (on a dedicated VPS there is one IP — the field is omitted).
 
 ## Alternatives Considered
 
-### Alternative 1: B — всё за одним Caddy (VPN + UI на 443)
-- **Pros**: один порт 443, не нужно открывать новый.
-- **Cons**: h2c-прослойка между Caddy и xray; VPN зависит от reload-рисков прокси; не «полный контроль над конфигом».
-- **Why not**: связывает жизненный цикл нового VPN с чужим прокси — именно та сложность, от которой уходим.
+### Alternative 1: B — everything behind one Caddy (VPN + UI on 443)
+- **Pros**: one port 443, no need to open a new one.
+- **Cons**: h2c layer between Caddy and xray; VPN depends on proxy reload risks; not "full control over the config".
+- **Why not**: ties the new VPN's lifecycle to a proxy we do not own — exactly the complexity we are moving away from.
 
-### Alternative 2: C — второй Caddy на 8443 + LE DNS-01
-- **Pros**: TLS-терминация привычным прокси, изоляция от общего Caddy.
-- **Cons**: лишняя сущность (второй прокси), сертификаты через DNS-01 API, возня с продлением.
-- **Why not**: Reality даёт TLS без сертификатов вообще — второй Caddy не нужен.
+### Alternative 2: C — second Caddy on 8443 + LE DNS-01
+- **Pros**: TLS termination by a familiar proxy, isolation from the shared Caddy.
+- **Cons**: extra entity (second proxy), certificates via DNS-01 API, renewal chores.
+- **Why not**: Reality gives TLS with no certificates at all — a second Caddy is unnecessary.
 
 ## Consequences
 
 ### Positive
-- VPN-канал независим от Caddy: reload прокси не рвёт VPN-сессии.
-- Нет домена/сертификата для VPN (Reality маскируется под dest-сайт).
-- Caddy обслуживает только панель: один сайт, простые правки и откат.
+- VPN channel is independent of Caddy: proxy reload does not drop VPN sessions.
+- No domain/certificate for the VPN (Reality masquerades as the dest site).
+- Caddy serves only the panel: one site, simple edits and rollback.
 
 ### Negative
-- Ещё один публичный порт (8443) — правило firewall.
-- UI зависит от Caddy: reload рвёт established-соединения панели.
+- One more public port (8443) — a firewall rule.
+- UI depends on Caddy: reload drops established panel connections.
 
 ### Risks
-- Reload Caddy рвёт established-соединения панели → явное разрешение оператора + верификация runtime-конфига (на выделенной VPS других сайтов нет, тихое окно не нужно).
-- Reality dest должен быть доступен из клиентской сети и поддерживать TLS1.3+H2 → дефолт www.microsoft.com:443, конфигурируемый.
+- Caddy reload drops established panel connections → explicit operator approval + runtime config verification (on a dedicated VPS there are no other sites, no quiet window needed).
+- Reality dest must be reachable from the client network and support TLS1.3+H2 → default www.microsoft.com:443, configurable.

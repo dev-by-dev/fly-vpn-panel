@@ -1,36 +1,36 @@
-# Залогиненный пользователь на /login видел карточку входа в рабочем лэйауте
+# Logged-in user on /login saw the login card inside the working layout
 
-## Симптом
+## Symptom
 
-При открытом `#/login` с активной сессией панель рисовала авторизованный
-лэйаут (шапка с вкладками) и Login-карточку внутри `<main>` — слева сверху.
-Выглядело как «вёрстка разъехалась», «не по центру», «не по ширине».
+With `#/login` open and an active session, the panel rendered the authenticated
+layout (header with tabs) and the Login card inside `<main>` — top left.
+It looked like "the layout fell apart", "not centered", "not full width".
 
-## Причина
+## Cause
 
-Маршрут `/login` присутствовал в карте маршрутов независимо от состояния
-сессии. Шапка и `main` рендерятся по `authState.loggedIn`, поэтому Login
-попадал внутрь рабочего каркаса.
+The `/login` route was present in the route map regardless of session
+state. The header and `main` render based on `authState.loggedIn`, so Login
+ended up inside the working frame.
 
-## Решение
+## Solution
 
 `web/src/App.svelte`:
 
-- импорт `Router, { router, replace }`;
-- эффект: если `authState.loggedIn && router.location === '/login'` —
-  `replace('/')` (без записи в историю);
-- `nav` получил `overflow-y-hidden` — вместе с `overflow-x-auto` и глобальными
-  10px вебкит-скроллбарами в шапке появлялся вертикальный ползунок.
+- import `Router, { router, replace }`;
+- effect: if `authState.loggedIn && router.location === '/login'` —
+  `replace('/')` (without writing to history);
+- `nav` got `overflow-y-hidden` — together with `overflow-x-auto` and the global
+  10px webkit scrollbars, a vertical bar appeared in the header.
 
-Разлогиненный на `/login` по-прежнему видит отдельный центрированный экран.
+A logged-out user on `/login` still sees a separate centered screen.
 
-## Проверка
+## Verification
 
-- Залогинен, открыт `#/login` → hash `#/`, h1 «Главная», Login-карточки нет.
-- Разлогинен, `#/login` → центрированная карточка без шапки.
-- `npm run check` 0 ошибок, `npx vitest run` 22 теста, `go test ./...` ok.
+- Logged in, `#/login` open → hash `#/`, h1 «Главная», no Login card.
+- Logged out, `#/login` → centered card without the header.
+- `npm run check` 0 errors, `npx vitest run` 22 tests, `go test ./...` ok.
 
-## Вне рамок
+## Out of scope
 
-Редирект с чужих защищённых маршрутов на `/login` при истёкшей сессии —
-поведение не менялось.
+Redirect from other protected routes to `/login` on an expired session —
+behavior unchanged.

@@ -1,63 +1,63 @@
-# Семантика «онлайн» для устройств (HWID)
+# Online semantics for devices (HWID)
 
-**Дата:** 2026-11-22
-**Статус:** реализовано (коммит `2821881`), задеплоено
-**Связанные файлы:** `internal/stats/poller.go`, `internal/store/devices.go`, `internal/api/handlers.go`, `web/src/routes/Users.svelte`
+**Date:** 2026-11-22
+**Status:** implemented (commit `2821881`), deployed
+**Related files:** `internal/stats/poller.go`, `internal/store/devices.go`, `internal/api/handlers.go`, `web/src/routes/Users.svelte`
 
-## Что случилось
+## What happened
 
-Во вкладке «HWID» при одном реально подключённом клиенте горели 4 зелёные точки.
+The “HWID” tab showed four green dots with only one client actually connected.
 
-Данные с продакшена (копия `panel.db`, чтение):
+Production data (a copy of `panel.db`, read-only):
 
 ```
-id  username     ip                hwid              ua                             last_seen
- 5  clash-verge  167.104.163.95    C6BF0F6F-…B2E5    Happ/4.8.1/macOS              2026-11-22T10:10:32Z
- 9  clash-verge  167.104.163.95    b91035b1c0dfd54b  Happ/4.11.2/Android           2026-11-22T10:10:32Z
-10  clash-verge  167.104.163.95    b45d2f0b8bbf4369  Happ/4.11.2/Android           2026-11-22T10:10:32Z
-11  clash-verge  167.104.163.95    (пусто)           HiddifyNext/5.9.15 (android)  2026-11-22T10:10:32Z
+id  username     ip              hwid              ua                             last_seen
+ 5  clash-verge  198.51.100.47   C6BF0F6F-…B2E5    Happ/4.8.1/macOS              2026-11-22T10:10:32Z
+ 9  clash-verge  198.51.100.47   b91035b1c0dfd54b  Happ/4.11.2/Android           2026-11-22T10:10:32Z
+10  clash-verge  198.51.100.47   b45d2f0b8bbf4369  Happ/4.11.2/Android           2026-11-22T10:10:32Z
+11  clash-verge  198.51.100.47   (empty)           HiddifyNext/5.9.15 (android)  2026-11-22T10:10:32Z
 ```
 
-Один юзер, один IP, `last_seen` совпадает до секунды — значит строки проставил поллер, а не клиенты.
+One user, one IP, `last_seen` matching to the second — so the poller stamped those rows, not the clients.
 
-## Причина
+## Cause
 
-1. `stats.Poller` на каждый онлайн-IP вызывал `DeviceUpsert(name, ip, meta{}, now)`, а тот при пустой мете делает
-   `UPDATE devices SET last_seen=? WHERE username=? AND ip=?` — штампует **все** строки этого IP (разные приложения, старые HWID после переустановки, пустой HWID).
-2. Затем поллер вызывал `DeviceTouchUser(name, now)` — `UPDATE devices SET last_seen=? WHERE username=?` — оживлял вообще **все** устройства юзера, включая строки с других IP.
-3. Онлайн в API считался как `last_seen >= now − 2·interval`, поэтому зелёными становились все проштампованные строки.
+1. `stats.Poller` called `DeviceUpsert(name, ip, meta{}, now)` for every online IP, and with empty meta that runs
+   `UPDATE devices SET last_seen=? WHERE username=? AND ip=?` — stamping **every** row of that IP (different apps, stale HWIDs after a reinstall, empty HWID).
+2. Then the poller called `DeviceTouchUser(name, now)` — `UPDATE devices SET last_seen=? WHERE username=?` — reviving literally **all** of the user's devices, including rows from other IPs.
+3. Online was computed in the API as `last_seen >= now − 2·interval`, so every stamped row turned green.
 
-Главный дефект — (2): устройство, которого нет в сети, выглядело онлайн вечно, пока юзер подключён хоть откуда-то.
+The main defect is (2): a device that is not on the network looked online forever as long as the user was connected from anywhere.
 
-## Ограничение, которое нельзя обойти
+## Constraint that cannot be worked around
 
-xray знает только «юзер онлайн с IP X». HWID в статистике xray нет. За NAT несколько устройств делят один публичный IP, поэтому «какое именно устройство подключено» панель определить не может — только «с какого адреса юзер сейчас ходит».
+xray only knows “user is online from IP X”. xray stats carry no HWID. Behind NAT several devices share one public IP, so the panel cannot tell which device is connected — only which address the user is currently coming from.
 
-## Принятая семантика (вариант A)
+## Accepted semantics (option A)
 
-- Онлайн определяется **на пару (юзер, IP)**, а не на устройство.
-- В каждой паре ровно одна строка считается онлайн — самая свежая; при равном `last_seen` — первая в выдаче.
-- Остальные строки той же пары отдаются как `same_ip: true` и рисуются серой точкой с пометкой «тот же IP».
-- Строки с IP, которого сейчас нет в онлайне, стареют сами и становятся красными.
-- `DeviceTouchUser` удалён; поллер трогает только устройства с реально онлайн IP.
+- Online is defined **per (user, IP) pair**, not per device.
+- In each pair exactly one row counts as online — the freshest one; on equal `last_seen`, the first in the output.
+- The remaining rows of the same pair are returned as `same_ip: true` and drawn as a grey dot labelled “same IP”.
+- Rows with an IP that is not online right now age out on their own and turn red.
+- `DeviceTouchUser` is removed; the poller only touches devices with a genuinely online IP.
 
-API `GET /api/devices` отдаёт на строку `online` и `same_ip`; `online_count` у юзера и `summary.online_count` не менялись (это количество юзеров, а не устройств).
+The `GET /api/devices` API returns `online` and `same_ip` per row; the per-user `online_count` and `summary.online_count` are unchanged (they count users, not devices).
 
-## Не-цели
+## Non-goals
 
-- Точная идентификация устройства за NAT — невозможна без HWID в статистике xray.
-- Разделение строк одного IP по User-Agent (два разных клиента с одного адреса неразличимы).
-- История подключений и «был онлайн N минут назад» сверх поля `last_seen`.
-- Изменение частоты поллинга и окна онлайна (`2 × interval`).
+- Exact device identification behind NAT — impossible without HWID in xray stats.
+- Splitting rows of one IP by User-Agent (two different clients from one address are indistinguishable).
+- Connection history and “was online N minutes ago” beyond the `last_seen` field.
+- Changing the polling frequency or the online window (`2 × interval`).
 
-## Проверка
+## Verification
 
-- `internal/stats/poller_test.go` → `TestOnlineDevicesIgnoreOtherIPs`: устройство с IP, которого нет в онлайне, не обновляется (RED до фикса: `last_seen = 10:27, want untouched 08:27`).
-- `internal/api/devices_test.go` → `TestDevicesOneOnlinePerIP`: две строки на одном IP + одна на другом → `online == 1`, `same_ip == 1` (RED до фикса: `online rows = 2, want 1`).
-- `web/src/routes/Users.test.ts` → «устройства за одним IP: одна зелёная точка и пометка «тот же IP»» (RED до фикса: нет текста «тот же IP»).
-- Существующий `TestOnlineDevices` (оба IP онлайн) продолжает проходить.
-- Полный прогон: `go test ./...` — ok; `npx vitest run` — 34/34; `npm run check` — 0 ошибок, 12 прежних предупреждений.
+- `internal/stats/poller_test.go` → `TestOnlineDevicesIgnoreOtherIPs`: a device whose IP is not online is not updated (RED before the fix: `last_seen = 10:27, want untouched 08:27`).
+- `internal/api/devices_test.go` → `TestDevicesOneOnlinePerIP`: two rows on one IP + one on another → `online == 1`, `same_ip == 1` (RED before the fix: `online rows = 2, want 1`).
+- `web/src/routes/Users.test.ts` → “devices behind one IP: one green dot and a ‘same IP’ label” (RED before the fix: no “same IP” text).
+- The existing `TestOnlineDevices` (both IPs online) keeps passing.
+- Full run: `go test ./...` — ok; `npx vitest run` — 34/34; `npm run check` — 0 errors, 12 pre-existing warnings.
 
-## Остаточное поведение
+## Residual behavior
 
-`last_seen` у строк одного IP по-прежнему обновляется поллером (онлайн меряется по IP). Меняется только отображение: зелёная точка одна на пару. Если когда-нибудь xray начнёт отдавать HWID в `GetStats`, пару «юзер + IP» можно заменить на «юзер + HWID» — тогда пункт «не-цели» про NAT снимается.
+`last_seen` for rows of one IP is still updated by the poller (online is measured by IP). Only the display changes: one green dot per pair. If xray ever starts returning HWID in `GetStats`, the “user + IP” pair can be replaced with “user + HWID” — and the NAT non-goal goes away.

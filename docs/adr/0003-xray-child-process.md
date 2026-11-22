@@ -2,40 +2,40 @@
 
 **Date**: 2026-11-20
 **Status**: accepted
-**Deciders**: агент-оператор (предложено) + владелец продукта (принято в scope v1)
+**Deciders**: agent-operator (proposed) + product owner (accepted into v1 scope)
 
 ## Context
 
-Хочется полный контроль над xray-конфигом и жизненным циклом без прослойки (node-агент действующей панели — именно та сложность, от которой уходим). Прецедент 3x-ui: панель сама владеет процессом xray.
+We want full control over the xray config and lifecycle with no intermediary layer (the node agent of the existing panel is exactly the complexity we are moving away from). Precedent 3x-ui: the panel itself owns the xray process.
 
 ## Decision
 
-Панель запускает xray как **дочерний процесс** и владеет его жизненным циклом целиком. Конфиг генерируется из БД (БД = source of truth). Структурные изменения: валидация `xray run -test` → запись → рестарт child (~1–2 с). Юзеры/квоты/лимиты/expiry: горячо через gRPC `HandlerService.AlterInbound` без рестарта. Крах xray → авто-рестарт с backoff.
+The panel starts xray as a **child process** and owns its lifecycle entirely. The config is generated from the DB (DB = source of truth). Structural changes: validate `xray run -test` → write → restart the child (~1–2 s). Users/quotas/limits/expiry: hot, via gRPC `HandlerService.AlterInbound` without restart. xray crash → auto-restart with backoff.
 
 ## Alternatives Considered
 
-### Alternative 1: отдельный systemd-unit для xray
-- **Pros**: независимый рестарт, привычный ops.
-- **Cons**: два владельца жизненного цикла, рассинхрон конфига и процесса, панель не может атомарно применить конфиг.
-- **Why not**: рассинхрон — источник тех самых «невидимых» поломок действующей панели.
+### Alternative 1: separate systemd unit for xray
+- **Pros**: independent restart, familiar ops.
+- **Cons**: two lifecycle owners, config/process desync, the panel cannot apply config atomically.
+- **Why not**: desync is the source of those very "invisible" breakages in the existing panel.
 
-### Alternative 2: node-агент (прослойка как в Remnawave)
-- **Pros**: мультинода из коробки.
-- **Cons**: лишняя сущность, свой API/секреты, генератор конфигов не под контролем.
-- **Why not**: мультинода — non-goal v1; прослойка — главная боль, от которой уходим.
+### Alternative 2: node agent (an intermediary layer like in Remnawave)
+- **Pros**: multi-node out of the box.
+- **Cons**: extra entity, its own API/secrets, config generator outside our control.
+- **Why not**: multi-node is a v1 non-goal; the intermediary layer is the main pain we are moving away from.
 
 ## Consequences
 
 ### Positive
-- Один владелец: атомарное применение конфига, валидация до рестарта.
-- Горячие операции с юзерами без разрыва соединений.
-- Итоговый конфиг всегда виден в UI.
+- One owner: atomic config application, validation before restart.
+- Hot user operations without dropping connections.
+- The resulting config is always visible in the UI.
 
 ### Negative
-- Падение панели убивает xray (child).
-- Структурные правки = 1–2 с даунтайма.
+- Panel crash kills xray (child).
+- Structural edits = 1–2 s downtime.
 
 ### Risks
-- Падение панели → systemd Restart=always для flypanel + авто-рестарт xray с backoff.
-- Невалидный конфиг → `xray run -test` до записи; при провале старый конфиг нетронут.
-- Сброс stats-счётчиков при рестарте xray → частый поллинг (30 с), дельты в SQLite.
+- Panel crash → systemd Restart=always for flypanel + auto-restart of xray with backoff.
+- Invalid config → `xray run -test` before writing; on failure the old config is untouched.
+- Stats counters reset on xray restart → frequent polling (30 s), deltas in SQLite.

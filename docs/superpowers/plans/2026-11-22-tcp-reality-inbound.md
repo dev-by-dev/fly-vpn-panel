@@ -1,40 +1,40 @@
-# Inbound VLESS+TCP+Reality и подписки под любой клиент
+# VLESS+TCP+Reality inbound and subscriptions for any client
 
-## Задача
+## Task
 
-Профиль панели — VLESS+XHTTP+Reality. На планшете (Huawei, Android 13) его не
-принимает ни один клиент:
+The panel profile is VLESS+XHTTP+Reality. On the tablet (Huawei, Android 13) no
+client accepts it:
 
-- Incy 3.9.9 при импорте выбрасывает `type=xhttp` и сохраняет VLESS·TCP без TLS;
-- Hiddify 5.5.5-dev при подключении не отправляет ни одного пакета;
-- v2rayNG 2.3.15 разбирает профиль верно, но его ядро гоняет исходящий трафик в
-  собственный tun0 (на сервер не приходит ни байта);
-- Happ падает на сборке REALITY: `empty "serverNames"`.
+- Incy 3.9.9 discards `type=xhttp` on import and saves VLESS·TCP without TLS;
+- Hiddify 5.5.5-dev sends not a single packet when connecting;
+- v2rayNG 2.3.15 parses the profile correctly, but its core pushes outbound
+  traffic into its own tun0 (not a byte reaches the server);
+- Happ crashes while assembling REALITY: `empty "serverNames"`.
 
-Сервер и ссылка при этом исправны: настоящий Xray 26.11.9 с тем же конфигом
-успешно ходит через туннель (api.ipify.org → 217.177.10.159).
+The server and the link are fine, though: real Xray 26.11.9 with the same config
+goes through the tunnel successfully (api.ipify.org → 203.0.113.9).
 
-## Решение
+## Solution
 
-1. Добавить второй inbound VLESS+TCP+Reality (порт 8444) — транспорт, который
-   понимают все перечисленные клиенты.
-2. Научить рендереры подписок сети отличной от XHTTP:
-   - `links.go`: `linkParams.Net` из `streamSettings.network` (по умолчанию
-     `xhttp` — обратная совместимость); `xhttpSettings` обязателен только для
-     xhttp; ссылка получает `type=<net>`, а `path`/`mode` — только для xhttp.
-   - `yaml.go`: `network: <net>`, `xhttp-opts` только для xhttp.
-   - `json.go` + `default_json.json`: плейсхолдер `{{NETWORK}}`.
+1. Add a second inbound, VLESS+TCP+Reality (port 8444) — a transport all the
+   listed clients understand.
+2. Teach the subscription renderers networks other than XHTTP:
+   - `links.go`: `linkParams.Net` from `streamSettings.network` (default
+     `xhttp` — backwards compatibility); `xhttpSettings` is mandatory only for
+     xhttp; the link gets `type=<net>`, while `path`/`mode` only for xhttp.
+   - `yaml.go`: `network: <net>`, `xhttp-opts` only for xhttp.
+   - `json.go` + `default_json.json`: the `{{NETWORK}}` placeholder.
 
-## Проверка
+## Verification
 
-- `go test ./internal/sub/` — новый `TestRenderBase64TCP`: две строки в base64,
-  у xhttp сохранены `path`/`mode`, у tcp — `type=tcp`, `security=reality`,
-  `encryption=none`, `pbk/sid/sni`, `fp=chrome`, без `path`/`mode`.
-- `go test ./...` — зелёный.
-- После деплоя: подписка содержит две ссылки, TCP-инбаунд слушает 8444,
-  подключение с планшета проходит.
+- `go test ./internal/sub/` — a new `TestRenderBase64TCP`: two base64 lines,
+  xhttp keeps `path`/`mode`, tcp has `type=tcp`, `security=reality`,
+  `encryption=none`, `pbk/sid/sni`, `fp=chrome`, without `path`/`mode`.
+- `go test ./...` — green.
+- After deploy: the subscription contains two links, the TCP inbound listens on
+  8444, and connecting from the tablet works.
 
-## Вне рамок
+## Out of scope
 
-- JSON-шаблон для TCP-инбаунда: остаётся xhttp-шаблон (клиенты для TCP берут
-  base64/mihomo).
+- A JSON template for the TCP inbound: the xhttp template stays (clients for TCP
+  use base64/mihomo).

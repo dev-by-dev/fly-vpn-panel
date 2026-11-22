@@ -1,7 +1,7 @@
 # Architecture Decision Records
 
-Формат: Michael Nygard (адаптированный). Статусы: proposed → accepted → deprecated / superseded.
-Все ADR обезличены (публичный репо): плейсхолдеры `<ENTRY_IP>`, `<EGRESS_IP>` (опциональный), `<PANEL_DOMAIN>` — см. дизайн-док §3.
+Format: Michael Nygard (adapted). Statuses: proposed → accepted → deprecated / superseded.
+All ADRs are anonymized (public repo): placeholders `<ENTRY_IP>`, `<EGRESS_IP>` (optional), `<PANEL_DOMAIN>` — see design doc §3.
 
 | ADR | Title | Status | Date |
 |-----|-------|--------|------|

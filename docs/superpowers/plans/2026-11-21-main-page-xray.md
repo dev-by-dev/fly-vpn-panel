@@ -1,28 +1,28 @@
-# Главная: xray и онлайн-устройства в блоке «Сервер»
+# Main page: xray and online devices in the «Сервер» block
 
-## Задача
+## Task
 
-На «Главной» карточка xray и таблица онлайн-устройств стояли отдельным блоком
-внизу. Нужно поднять их к карточкам сервера, а от xray оставить только статус и
-версию (PID, аптайм, число рестартов не нужны).
+On «Главная» the xray card and the online-devices table stood as a separate block
+at the bottom. They should be moved up to the server cards, and only status and
+version should remain from xray (PID, uptime, restart count are not needed).
 
-## Решение
+## Solution
 
 `web/src/routes/Dashboard.svelte`:
 
-- В ряд «Сервер» добавлена компактная карточка xray: «Работает»/«Остановлен»
-  (зелёный/красный), версия и кнопки Старт/Стоп/Рестарт.
-- Таблица «Онлайн-устройства» перенесена сразу под ряд карточек сервера.
-- Нижний блок «xray + онлайн-устройства» удалён.
-- Неиспользуемый импорт `fmtUptime` убран.
+- A compact xray card added to the «Сервер» row: «Работает»/«Остановлен»
+  (green/red), version and Start/Stop/Restart buttons.
+- The «Онлайн-устройства» table moved right under the server card row.
+- The bottom "xray + online devices" block removed.
+- Unused `fmtUptime` import removed.
 
-## Проверка
+## Verification
 
-- Браузер (vite dev + локальная панель): карточка xray в ряду метрик, статус и
-  версия, кнопки на месте; таблица устройств под рядом; внизу дубля нет.
-- `npm run check` — 0 ошибок, 12 прежних предупреждений; `npx vitest run` — 22
-  теста; `go test ./...` — без изменений (правка только во фронтенде).
+- Browser (vite dev + local panel): xray card in the metrics row, status and
+  version, buttons in place; the devices table under the row; no duplicate at the bottom.
+- `npm run check` — 0 errors, 12 previous warnings; `npx vitest run` — 22
+  tests; `go test ./...` — unchanged (frontend-only change).
 
-## Вне рамок
+## Out of scope
 
-- Аптайм/рестарты xray не показываются; вернуть, если понадобится.
+- xray uptime/restarts are not shown; bring back if needed.

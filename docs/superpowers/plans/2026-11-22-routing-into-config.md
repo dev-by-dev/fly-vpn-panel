@@ -1,43 +1,43 @@
-# Routing → вкладка «Конфиг»: план реализации
+# Routing → «Конфиг» tab: implementation plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Убрать вкладку Routing из верхнего nav, перенеся её JSON-редактор в нижнюю секцию страницы «Конфиг».
+**Goal:** Remove the Routing tab from the top nav, moving its JSON editor into the bottom section of the «Конфиг» page.
 
-**Architecture:** Редактор остаётся тем же (textarea + «Проверить» + «Применить» через `/api/config/routing` GET/PUT), но живёт в `Config.svelte` рядом с read-only генеральным конфигом. Обе ручки грузятся параллельно, их ошибки независимы. Старый маршрут `#/routing` ведёт на `Config`.
+**Architecture:** The editor stays the same (textarea + «Проверить» + «Применить» via `/api/config/routing` GET/PUT), but lives in `Config.svelte` next to the read-only general config. Both endpoints load in parallel, their errors are independent. The old route `#/routing` leads to `Config`.
 
-**Tech Stack:** Svelte 5 (руны `$state`), svelte-spa-router, vitest + @testing-library/svelte.
+**Tech Stack:** Svelte 5 (runes `$state`), svelte-spa-router, vitest + @testing-library/svelte.
 
 **Spec:** `docs/superpowers/specs/2026-11-22-routing-into-config-design.md`
 
 ## Global Constraints
 
-- Бэкенд не менять: `/api/config/routing` GET/PUT и дефолт `{"domainStrategy":"AsIs","rules":[]}` как есть.
-- Текст редактора отправляется на сервер байт-в-байт, без пере-сериализации.
-- Тексты ошибок/подсказок сохранить из `Routing.svelte`: «Применено», «Некорректный JSON (422)», «Применение не удалось (422), конфиг откачен к прежнему значению», «xray недоступен (502)», warning про мгновенное применение и откат.
-- Язык интерфейса — русский, стили — существующие классы (border, bg-muted/30, text-red-400 / text-emerald-400).
+- Do not change the backend: `/api/config/routing` GET/PUT and the default `{"domainStrategy":"AsIs","rules":[]}` as they are.
+- The editor text is sent to the server byte-for-byte, without re-serialisation.
+- Keep the error/hint texts from `Routing.svelte`: «Применено», «Некорректный JSON (422)», «Применение не удалось (422), конфиг откачен к прежнему значению», «xray недоступен (502)», the warning about instant application and rollback.
+- The interface language is Russian, the styles are the existing classes (border, bg-muted/30, text-red-400 / text-emerald-400).
 
 ## Review Focus
 
-- Ошибка загрузки routing не должна скрывать сгенерированный конфиг (секции независимы).
-- Закладка `#/routing` должна открывать «Конфиг», а не пустую страницу.
-- Первый заход без сохранённого routing показывает дефолтный объект, а не пустую textarea.
-- Изменённый текст уходит в PUT ровно как введён.
-- 422 показывается как откат, 502 — как недоступность xray; прочие коды — с числом.
+- A routing load error must not hide the generated config (the sections are independent).
+- The `#/routing` bookmark must open «Конфиг», not an empty page.
+- The first visit without a saved routing shows the default object, not an empty textarea.
+- The changed text goes into the PUT exactly as entered.
+- 422 is shown as a rollback, 502 as xray being unreachable; other codes with the number.
 
 ---
 
-### Task 1: Секция Routing в Config.svelte
+### Task 1: Routing section in Config.svelte
 
 **Files:**
 - Create: `web/src/routes/Config.test.ts`
 - Modify: `web/src/routes/Config.svelte`
 
 **Interfaces:**
-- Consumes: `apiFetch` из `$lib/api`, `Button` из `$lib/components/ui/button` (уже импортируется в Config.svelte); эндпоинты `GET /api/config`, `GET|PUT /api/config/routing`.
-- Produces: `Config.svelte` с единственным `textarea` (`aria-label="Routing JSON"`) и кнопками «Проверить» / «Применить»; Task 2 лишь переключает маршруты и nav.
+- Consumes: `apiFetch` from `$lib/api`, `Button` from `$lib/components/ui/button` (already imported in Config.svelte); endpoints `GET /api/config`, `GET|PUT /api/config/routing`.
+- Produces: `Config.svelte` with a single `textarea` (`aria-label="Routing JSON"`) and «Проверить» / «Применить» buttons; Task 2 only switches routes and nav.
 
-- [ ] **Step 1: Написать падающий тест**
+- [ ] **Step 1: Write the failing test**
 
 ```ts
 // web/src/routes/Config.test.ts
@@ -111,29 +111,29 @@ test('ошибка загрузки routing не скрывает конфиг',
 });
 ```
 
-- [ ] **Step 2: Убедиться, что тест падает**
+- [ ] **Step 2: Confirm the test fails**
 
 Run: `cd web && npx vitest run src/routes/Config.test.ts`
 Expected: FAIL — `Unable to find a label with the text of: Routing JSON`.
 
-- [ ] **Step 3: Реализовать секцию в `Config.svelte`**
+- [ ] **Step 3: Implement the section in `Config.svelte`**
 
-Перенести из удаляемого `Routing.svelte` состояние и функции как есть: `rText`, `rCheckMsg`, `rCheckOk`, `rApplyMsg`, `rApplyOk`, `rError`, `rCheck()`, `rApply()` (тот же разбор 422/502), но с префиксом `r`, чтобы не конфликтовать с `cfg/copied/notGenerated`. `onMount` грузит обе ручки параллельно (`Promise.all` не нужен — независимые `void`-вызовы или два `await` в одном колбэке); кнопки — существующий `Button`. Текст загрузки routing: `Не удалось загрузить routing (${res.status})`, сеть: `Сеть недоступна`.
+Move the state and functions over from the `Routing.svelte` being deleted as they are: `rText`, `rCheckMsg`, `rCheckOk`, `rApplyMsg`, `rApplyOk`, `rError`, `rCheck()`, `rApply()` (the same 422/502 handling), but with the `r` prefix so they don't clash with `cfg/copied/notGenerated`. `onMount` loads both endpoints in parallel (no need for `Promise.all` — independent `void` calls or two `await`s in one callback); buttons are the existing `Button`. The routing load text: `Не удалось загрузить routing (${res.status})`, network: `Сеть недоступна`.
 
-Разметка ниже существующего блока конфига:
+Markup below the existing config block:
 
 ```svelte
 <h2 class="mt-8 text-lg font-semibold">Routing (advanced JSON)</h2>
 <p class="mt-2 text-sm text-muted-foreground">
-  ⚠ Применение сразу изменяет работающий xray; при ошибке применения значение откатывается к прежнему.
+  `⚠ Применение сразу изменяет работающий xray; при ошибке применения значение откатывается к прежнему.` (UI warning string)
 </p>
 <textarea bind:value={rText} aria-label="Routing JSON" spellcheck="false"
   class="mt-4 h-[40vh] w-full rounded-xl border bg-muted/30 p-4 font-mono text-xs"></textarea>
 ```
 
-Кнопки «Проверить» (JSON.parse) и «Применить» + строка статуса — как в `Routing.svelte`. `Полный отказ от санитайзера` не трогаем.
+The «Проверить» (JSON.parse) and «Применить» buttons + status line — as in `Routing.svelte`. `Полный отказ от санитайзера` is left untouched.
 
-- [ ] **Step 4: Прогнать тест**
+- [ ] **Step 4: Run the test**
 
 Run: `cd web && npx vitest run src/routes/Config.test.ts`
 Expected: PASS, 4/4.
@@ -145,38 +145,38 @@ git add web/src/routes/Config.svelte web/src/routes/Config.test.ts
 git commit -m "feat(web): move routing editor into config page"
 ```
 
-### Task 2: Убрать вкладку Routing
+### Task 2: Remove the Routing tab
 
 **Files:**
 - Modify: `web/src/App.svelte`
 - Delete: `web/src/routes/Routing.svelte`
 
 **Interfaces:**
-- Consumes: `Config.svelte` из Task 1 (маршрут `'/routing'` теперь указывает на него).
-- Produces: nav без пункта «Routing», routes без `Routing`-компонента.
+- Consumes: `Config.svelte` from Task 1 (the `'/routing'` route now points at it).
+- Produces: nav without the «Routing» item, routes without the `Routing` component.
 
-- [ ] **Step 1: Правки в `App.svelte`**
+- [ ] **Step 1: Edits in `App.svelte`**
 
-Удалить `import Routing from './routes/Routing.svelte';`, заменить в `routes` строку `'/routing': Routing,` на `'/routing': Config,` (чтобы старые закладки открывали «Конфиг»), удалить из `nav` элемент `{ href: '#/routing', path: '/routing', label: 'Routing' }`.
+Delete `import Routing from './routes/Routing.svelte';`, replace the line `'/routing': Routing,` in `routes` with `'/routing': Config,` (so old bookmarks open «Конфиг»), remove the element `{ href: '#/routing', path: '/routing', label: 'Routing' }` from `nav`.
 
-- [ ] **Step 2: Удалить файл и проверить, что ссылок не осталось**
+- [ ] **Step 2: Delete the file and check no references remain**
 
 ```bash
 git rm web/src/routes/Routing.svelte
 grep -rn "Routing" web/src --include=*.svelte --include=*.ts
 ```
 
-Expected: grep находит только `('/routing': Config)` и текст секции «Routing (advanced JSON)» в Config.svelte; импортов `routes/Routing.svelte` нет.
+Expected: grep finds only `('/routing': Config)` and the «Routing (advanced JSON)» section text in Config.svelte; no imports of `routes/Routing.svelte`.
 
-- [ ] **Step 3: Проверить сборку и всё web-тесты**
+- [ ] **Step 3: Check the build and all web tests**
 
 Run: `cd web && npm run check && npx vitest run`
-Expected: 0 ошибок; тесты зелёные (включая `Config.test.ts`).
+Expected: 0 errors; tests green (including `Config.test.ts`).
 
-- [ ] **Step 4: Собрать бинарник с embedded SPA**
+- [ ] **Step 4: Build the binary with the embedded SPA**
 
 Run: `make build`
-Expected: `bin/flypanel` собран, ошибок `go:embed` нет.
+Expected: `bin/flypanel` built, no `go:embed` errors.
 
 - [ ] **Step 5: Commit**
 
@@ -185,6 +185,6 @@ git add web/src/App.svelte
 git commit -m "feat(web): drop routing tab, keep route for old links"
 ```
 
-## Ручная проверка после сборки
+## Manual check after the build
 
-`./bin/flypanel serve` → в шапке 6 пунктов без «Routing»; `#/config` показывает конфиг и секцию Routing; `#/routing` открывает ту же страницу «Конфиг»; правка JSON + «Применить» даёт «Применено» (локально без xray — 502).
+`./bin/flypanel serve` → 6 items in the header without «Routing»; `#/config` shows the config and the Routing section; `#/routing` opens the same «Конфиг» page; editing the JSON + «Применить» gives «Применено» (locally without xray — 502).

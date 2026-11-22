@@ -1,32 +1,32 @@
-# Онлайн-устройства на «Главной» в виде карточек
+# Online devices on «Главная» as cards
 
-## Задача
+## Task
 
-После удаления таблицы онлайн-устройств пользователь попросил оставить их на
-главном экране, но оформить как ряд компактных карточек с иконкой, подписью и
-значением (в стиле карточек статистики Remnawave).
+After the online-devices table was removed, the user asked to keep them on the
+main screen but present them as a row of compact cards with an icon, a label and
+a value (in the style of Remnawave statistic cards).
 
-## Решение
+## Solution
 
-В `web/src/routes/Dashboard.svelte`:
+In `web/src/routes/Dashboard.svelte`:
 
-- вернули тип `Device`, состояние `devices`, `fmtDate()` и запрос
-  `/api/stats/online` в `loadRest()`;
-- под рядом метрик сервера добавлен блок «Онлайн-устройства»:
-  `flex flex-wrap gap-2`, карточка `rounded-lg border bg-card px-3 py-2`,
-  слева иконка устройства в тонированном квадрате `bg-primary/10 text-primary`,
-  справа — IP мелким моно, имя пользователя крупно, время последней активности;
-- пустое состояние — «Никого нет».
+- brought back the `Device` type, the `devices` state, `fmtDate()` and the
+  `/api/stats/online` request in `loadRest()`;
+- a «Онлайн-устройства» block added under the server metrics row:
+  `flex flex-wrap gap-2`, card `rounded-lg border bg-card px-3 py-2`,
+  on the left a device icon in a tinted square `bg-primary/10 text-primary`,
+  on the right — IP in small mono, username large, last activity time;
+- empty state — «Никого нет».
 
-Бэкенд не менялся: `/api/stats/online` отдаёт устройства, виденные за два
-интервала поллера.
+Backend unchanged: `/api/stats/online` returns devices seen during two
+poller intervals.
 
-## Проверка
+## Verification
 
-- Браузер (vite dev + локальная панель): карточка устройства рендерится
-  (IP, юзер, время), пустой список показывает «Никого нет».
+- Browser (vite dev + local panel): the device card renders
+  (IP, user, time), an empty list shows «Никого нет».
 - `npm run check`, `npx vitest run`, `go test ./...`.
 
-## Вне рамок
+## Out of scope
 
-- Группировка устройств по юзеру и действия над устройством.
+- Grouping devices by user and actions on a device.

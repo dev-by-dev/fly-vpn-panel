@@ -245,4 +245,4 @@ Cases (table with method, path, authorization header, expected status, expected 
 - [ ] `make test` → all Go packages pass.
 - [ ] `cd web && npx vitest run` → all tests pass.
 - [ ] `make cross` → binary builds.
-- [ ] Manual smoke against the local panel (`http://127.0.0.1:3002`, admin `FlyPanel-2026`): create `full` token, `curl -H "Authorization: Bearer fp_…" /api/stats/summary` → 200; same on `/api/config` with a `read` token → 403; revoke → 401.
+- [ ] Manual smoke against the local panel (`http://127.0.0.1:3002`, admin `TestPassword-123`): create `full` token, `curl -H "Authorization: Bearer fp_…" /api/stats/summary` → 200; same on `/api/config` with a `read` token → 403; revoke → 401.

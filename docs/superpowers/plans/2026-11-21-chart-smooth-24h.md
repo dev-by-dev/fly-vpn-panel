@@ -1,34 +1,34 @@
-# Плавный график и 24-часовые подписи
+# Smooth chart and 24-hour labels
 
-Ветка: `chart-smooth-20261121-05` (от `dev`)
+Branch: `chart-smooth-20261121-05` (from `dev`)
 
-## Задача
+## Task
 
-Пользователь: «Теперь сам график. Он должен быть волнообразным, а не остроугольным.
-Время в формате 24 часа».
+User: "Now the chart itself. It should be wavy, not sharp-angled.
+Time in 24-hour format."
 
-## Решение
+## Solution
 
 `web/src/lib/components/TrafficChart.svelte`:
 
-- Линии серий: `paths: uPlot.paths.spline()` для «Отдача» и «Загрузка» —
-  monotone cubic из uPlot, сглаживает без выбросов за пределы данных
-  (обычный Catmull-Rom может уходить ниже нуля и рисовать «горбы» над пиком).
-  Статик `uPlot.paths` не описан в типах `export = uPlot`, поэтому берётся
-  через локальный каст.
-- Ось X: свой форматтер вместо дефолтного (`8pm`, `11/20/26`):
-  - диапазон ≤ 24 ч → `ЧЧ:ММ` (`toLocaleTimeString('ru-RU', {hour12:false})`);
-  - диапазон > 24 ч → `ДД.ММ ЧЧ:ММ`.
+- Series lines: `paths: uPlot.paths.spline()` for «Отдача» and «Загрузка» —
+  monotone cubic from uPlot, smooths without overshooting beyond the data
+  (plain Catmull-Rom can dip below zero and draw "humps" above a peak).
+  The `uPlot.paths` static is not described in the `export = uPlot` types, so it is
+  taken through a local cast.
+- X axis: custom formatter instead of the default (`8pm`, `11/20/26`):
+  - range ≤ 24 h → `HH:MM` (`toLocaleTimeString('ru-RU', {hour12:false})`);
+  - range > 24 h → `DD.MM HH:MM`.
 
-## Проверка
+## Verification
 
-- Браузер (vite dev :5199, 1440×900): дневной диапазон — плавные волны,
-  подписи `20:00 … 19:00`, без `pm/am`; недельный — подписи `ЧЧ:ММ`
-  (локальные данные покрывают только сутки; на реальных 7 днях будет `ДД.ММ ЧЧ:ММ`).
-- `npm run check` — 0 ошибок; `npx vitest run` — 22 теста.
+- Browser (vite dev :5199, 1440×900): day range — smooth waves,
+  labels `20:00 … 19:00`, no `pm/am`; week range — `HH:MM` labels
+  (local data covers only one day; on real 7 days it will be `DD.MM HH:MM`).
+- `npm run check` — 0 errors; `npx vitest run` — 22 tests.
 
-## Вне рамок
+## Out of scope
 
-- Стиль/толщина линий, точки на данных, тултип — не менялись.
-- Порог «24 ч» ровно на границе (span == 86400) показывает только время —
-  для суточного диапазона это и нужно.
+- Line style/thickness, data points, tooltip — unchanged.
+- The "24 h" threshold right at the boundary (span == 86400) shows time only —
+  which is what a daily range needs.

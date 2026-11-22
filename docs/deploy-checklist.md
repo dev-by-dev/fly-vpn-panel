@@ -12,7 +12,8 @@ Placeholders: `<ENTRY_IP>` public VPS IP (entry=egress when single IP),
 egress IP (empty → `sendThrough` omitted).
 
 ## 0. Prerequisites
-- Dedicated VPS, Ubuntu 24.04 LTS, ≥1 vCPU / 1 GB RAM / 10 GB disk.
+- Dedicated VPS, Ubuntu 22.04/24.04 LTS or CentOS Stream 9/10 (the installer also
+  handles firewalld and SELinux), ≥1 vCPU / 1 GB RAM / 10 GB disk.
 - Ports free: 80, 443, 8443 (VPN), 3002 (panel loopback), 10811 (xray API loopback).
   Check `ss -ltnp`. Do NOT touch the provider agent's ports.
 - SSH access via operator tooling only; explicit approval per action; never
@@ -79,16 +80,27 @@ WantedBy=multi-user.target
 read-only and xray config validation writes a temp file there (pitfall #2).
 
 `SupplementaryGroups=systemd-journal` lets the panel read `journalctl` for the
-«Мониторинг → Логи» view. Without it the page shows
-«Журнал systemd недоступен» (backend 502 `journal_unavailable`) and everything
+Monitoring → Logs view. Without it the page shows
+“systemd journal unavailable” (backend 502 `journal_unavailable`) and everything
 else keeps working. Apply with `systemctl daemon-reload && systemctl restart flypanel`.
 
 ## 4. Admin
-Operator runs interactively over SSH (password never in chat/logs):
+The automatic installer generates a random 16-character password and prints it
+with the login details; the same line is kept in `/var/log/flypanel-install.log`.
+Check whether an account exists:
+```
+sudo -u flypanel FLYPANEL_ENV=/opt/flypanel/.env /opt/flypanel/bin/flypanel admin status
+```
+Manual install: run interactively over SSH (password never in chat/logs), or
+non-interactively with stdin:
 ```
 sudo -u flypanel FLYPANEL_ENV=/opt/flypanel/.env /opt/flypanel/bin/flypanel admin init
+printf 'your-password-here\n' | sudo -u flypanel FLYPANEL_ENV=/opt/flypanel/.env /opt/flypanel/bin/flypanel admin init --password-stdin admin
 ```
-Username + password ≥12 chars. 2FA (TOTP) optional, enable later in Settings UI.
+Flags must come before the username — Go's flag package stops parsing at the
+first positional argument. Password ≥12 chars. 2FA (TOTP) is optional, enable it
+later in Settings. Change the generated password in Settings → Password; that
+revokes all refresh tokens and API tokens.
 
 ## 5. UFW
 ```
@@ -101,7 +113,8 @@ ufw default deny incoming; ufw default allow outgoing; ufw --force enable
 ## 6. DNS + Caddy (native)
 - Operator points `<PANEL_DOMAIN>` A record → `<ENTRY_IP>`. Verify via DoH
   (`https://dns.google/resolve?name=<PANEL_DOMAIN>&type=A`).
-- Install Caddy from the official cloudsmith repo (native, not Docker).
+- Install Caddy natively (the installer unpacks the pinned 2.11.9 static release
+  into `/usr/local/bin/caddy` with its own unit; the distro package works too).
 - `/etc/caddy/Caddyfile` (backup first: `cp -a Caddyfile Caddyfile.bak-YYYYMMDD`):
   ```
   {
@@ -115,8 +128,8 @@ ufw default deny incoming; ufw default allow outgoing; ufw --force enable
   ```
   The global `metrics` block enables Caddy's own Prometheus counters — the panel
   scrapes them every 15 s from `http://127.0.0.1:2019/metrics` into SQLite for
-  «Мониторинг → Caddy». Without it the admin endpoint still answers but has no
-  `caddy_http_requests_total`, and the view stays at «Данных пока нет».
+  Monitoring → Caddy. Without it the admin endpoint still answers but has no
+  `caddy_http_requests_total`, and the view stays at “no data yet”.
   `log` writes the JSON access log to stderr → journald, where the logs view reads it.
 - `caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile`
 - `systemctl reload caddy` (breaks established panel connections; on a fresh
@@ -126,7 +139,7 @@ ufw default deny incoming; ufw default allow outgoing; ufw --force enable
 - Metrics check: `curl -s http://127.0.0.1:2019/metrics | grep -c caddy_http_requests_total`
   → non-zero after a request to the panel. `CADDY_ADMIN_URL` overrides the default
   `http://127.0.0.1:2019` if Caddy's admin API listens elsewhere.
-- Logs check: «Мониторинг → Логи» shows lines for `server`, `caddy` and `xray`
+- Logs check: Monitoring → Logs shows lines for `server`, `caddy` and `xray`
   (the last one appears only after xray logs a warning/error).
 
 ## 7. E2E verification
@@ -143,10 +156,15 @@ ufw default deny incoming; ufw default allow outgoing; ufw --force enable
   hot-removes the user (`xray api inboundusercount` → 0); reset quota → poller
   re-enables and hot-adds (count → 1).
 
-## 8. Rollback
-`systemctl stop flypanel`; `ufw delete allow 8443/tcp`; remove the Caddy site
-block + `systemctl reload caddy`; revert DNS if needed. `/opt/flypanel` data is
-left untouched.
+## 8. Rollback / removal
+Full removal: the release asset `uninstall.sh` (see README) — it deletes the
+units, `/opt/flypanel` **including the database**, our Caddyfile block, the
+firewall and SELinux entries, and the packages the installer added. System
+updates it applied are not rolled back.
+
+Manual rollback that keeps data: `systemctl stop flypanel`; `ufw delete allow
+8443/tcp`; remove the Caddy site block + `systemctl reload caddy`; revert DNS if
+needed. `/opt/flypanel` data is left untouched.
 
 ## Known pitfalls (found + fixed during first deploy)
 1. **serve must generate the initial xray config** before starting xray
@@ -180,5 +198,7 @@ left untouched.
 - Caddy logs go to journald; the panel reads them through the systemd-journal group.
 - Validate captures CombinedOutput (xray writes config errors to stdout).
 - Daily SQLite backup via `VACUUM INTO data/backups/panel-YYYYMMDD.db` (keep 7).
+- Releases are published by CI on a `v*` tag and carry `flypanel-linux-amd64`,
+  `install.sh`, `uninstall.sh` and `sha256sums.txt`.
 - Poller startup races xray listen for one tick (connection refused) then
   connects; this is expected, not a fault.

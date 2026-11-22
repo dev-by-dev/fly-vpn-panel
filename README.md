@@ -11,9 +11,9 @@ curl -fsSL https://github.com/dev-by-dev/fly-vpn-panel/releases/latest/download/
 sudo bash install.sh
 ```
 
-The script asks for the language (ru/en/de), the domain, an optional ACME e-mail and whether to open the firewall. It then installs the panel, xray, Caddy with a Let's Encrypt certificate and a systemd unit. Every step checks the current state, so running the same command again upgrades without touching data.
+The script asks for the language (ru/en/de), the domain, an optional ACME e-mail and whether to open the firewall. It updates the system, then installs the panel, xray, Caddy with a Let's Encrypt certificate and a systemd unit, generates a random admin password and prints the login details (URL, local URL, login, password) at the end. Every step checks the current state, so running the same command again upgrades without touching data; a flock lock stops a second copy from running at the same time.
 
-Non-interactive: `sudo bash install.sh --yes --domain panel.example.org`. Other flags: `--lang en`, `--dry-run`, `--skip-dns`, `--skip-firewall`, `--no-update`, `--force`.
+Non-interactive: `sudo bash install.sh --yes --domain panel.example.org` (the password is still generated and printed). Other flags: `--lang en`, `--admin <name>`, `--email <addr>`, `--ip <addr>`, `--dry-run`, `--skip-dns`, `--skip-firewall`, `--no-update`, `--force`.
 
 Manual install on other distributions: [docs/deploy-checklist.md](docs/deploy-checklist.md).
 
@@ -69,6 +69,7 @@ Keys (path selectable via the `FLYPANEL_ENV` env var, default `./.env`):
 | `PANEL_DOMAIN` | Domain the panel is served on |
 | `POLL_INTERVAL_SEC` | Xray stats poll interval (default 30) |
 | `COOKIE_SECURE` | `true` when served over HTTPS (Secure cookies) |
+| `CADDY_ADMIN_URL` | Caddy admin API root for the metrics scraper (default `http://127.0.0.1:2019`) |
 
 ## Run
 

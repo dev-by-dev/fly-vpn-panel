@@ -1,41 +1,43 @@
-# Inbounds: два выпадающих меню (действия и метрики)
+# Inbounds: two dropdown menus (actions and metrics)
 
-## Задача
+## Task
 
-На странице Inbounds действия были размазаны по строке таблицы. Нужны два
-выпадающих меню: в одном добавление/настройка/удаление инбаундов, в другом —
-метрики по ним (как «Metrics Overview» в Remnawave).
+On the Inbounds page the actions were spread across the table row. Two dropdown
+menus are needed: one for adding/configuring/deleting inbounds, the other for
+their metrics (like "Metrics Overview" in Remnawave).
 
-## Решение
+## Solution
 
-Бэкенд:
+Backend:
 
-- `xrayclient.InboundTraffic()` — один `QueryStats` без Pattern, разбор имён
-  `inbound>>>{tag}>>>traffic>>>uplink|downlink` в `[]InboundTraffic{Tag, Up, Down}`.
-  Счётчики уже включены в генерируемом конфиге (`stats` + `policy` с
-  `statsInboundUplink/Downlink`), новых настроек xray не нужно.
+- `xrayclient.InboundTraffic()` — a single `QueryStats` without Pattern, parsing
+  names `inbound>>>{tag}>>>traffic>>>uplink|downlink` into
+  `[]InboundTraffic{Tag, Up, Down}`. The counters are already enabled in the
+  generated config (`stats` + `policy` with
+  `statsInboundUplink/Downlink`), no new xray settings are needed.
 - `GET /api/inbounds/metrics` → `{"inbounds": [...], "online_count": N}`;
-  502 `xray_unavailable`, если gRPC недоступен.
+  502 `xray_unavailable` when gRPC is unreachable.
 
-Фронтенд (`web/src/routes/Inbounds.svelte`):
+Frontend (`web/src/routes/Inbounds.svelte`):
 
-- в шапке два меню-кнопки «Действия ▾» и «Метрики ▾»;
-- «Действия»: «Добавить inbound», ниже по строке на инбаунд — «Настроить» и
+- two menu buttons in the header, «Действия ▾» and «Метрики ▾»;
+- «Действия»: «Добавить inbound», and further down, per inbound, «Настроить» and
   «Удалить»;
-- «Метрики»: карточки «Инбаунды / Онлайн / Трафик» и список тегов с ↑UP / ↓DOWN,
-  кнопка «Обновить», состояния «Загрузка…» и ошибка.
+- «Метрики»: «Инбаунды / Онлайн / Трафик» cards and a tag list with ↑UP / ↓DOWN,
+  a «Обновить» button, «Загрузка…» states and an error.
 
-## Проверка
+## Verification
 
-- `go build ./...`, `go test ./internal/...` — зелёные.
-- `npm run check` — 0 ошибок (12 старых предупреждений), `vitest` 22/22.
-- Локально: меню «Действия» показывает «Добавить inbound» + строку инбаунда;
-  «Метрики» отдаёт 502 `xray_unavailable` (stub xray без gRPC) и показывает
-  ошибку — маршрут смонтирован.
-- На проде: карточки и счётчики по `vless-xhttp` и `vless-tcp`.
+- `go build ./...`, `go test ./internal/...` — green.
+- `npm run check` — 0 errors (12 pre-existing warnings), `vitest` 22/22.
+- Locally: the «Действия» menu shows «Добавить inbound» + the inbound row;
+  «Метрики» returns 502 `xray_unavailable` (xray stub without gRPC) and shows the
+  error — the route is mounted.
+- In production: cards and counters for `vless-xhttp` and `vless-tcp`.
 
-## Вне рамок
+## Out of scope
 
-- Outbound-метрики (DIRECT) и Prometheus-эндпоинт — в панели нет outbound-логики.
-- История метрик: счётчики xray кумулятивные с момента старта. Живые значения
-  накапливаются между рестартами процессов.
+- Outbound metrics (DIRECT) and a Prometheus endpoint — the panel has no outbound
+  logic.
+- Metrics history: xray counters are cumulative since start. Live values
+  accumulate across process restarts.

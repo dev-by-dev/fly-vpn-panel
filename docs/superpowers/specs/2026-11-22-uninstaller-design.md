@@ -1,82 +1,82 @@
-# Деинсталлятор flypanel — дизайн
+# flypanel uninstaller — design
 
-## Зачем
+## Why
 
-После установки скриптом `scripts/install.sh` на сервере остаются юзер, бинари, юниты, правки Caddyfile, правила фаервола и пакеты. Нужен `scripts/uninstall.sh`, который возвращает машину в состояние «как до установки»: одна команда, те же три языка, `--dry-run`, идемпотентность.
+After installing with `scripts/install.sh` the server keeps the user, binaries, units, Caddyfile edits, firewall rules and packages. We need `scripts/uninstall.sh` that returns the machine to its “before install” state: one command, the same three languages, `--dry-run`, idempotency.
 
-## Что именно оставил установщик
+## What exactly the installer left behind
 
-Сверено с `scripts/install.sh`:
+Cross-checked against `scripts/install.sh`:
 
-1. юзер `flypanel` и `/opt/flypanel/{bin,data,logs,backups}`;
+1. the user `flypanel` and `/opt/flypanel/{bin,data,logs,backups}`;
 2. `/opt/flypanel/bin/{flypanel,xray,geoip.dat,geosite.dat}`, `/opt/flypanel/.env` (+ `.bak-*`);
-3. `/etc/systemd/system/flypanel.service` (enabled, запущен, xray — его дочерний процесс);
-4. Caddy: `/usr/local/bin/caddy`, юзер `caddy`, `/var/lib/caddy`, `/etc/systemd/system/caddy.service`, блок `# flypanel-managed begin|end` в `/etc/caddy/Caddyfile`, возможно добавленный глобальный блок `{ metrics }`;
-5. правила ufw/firewall-cmd: SSH-порт, 80, 443, 8443; `ufw --force enable`;
-6. CentOS: `semanage port` для 8443 и 3002;
-7. пакеты (`curl ca-certificates unzip ufw iproute2` / `curl ca-certificates unzip firewalld policycoreutils-python-utils iproute`);
+3. `/etc/systemd/system/flypanel.service` (enabled, running, xray is its child process);
+4. Caddy: `/usr/local/bin/caddy`, user `caddy`, `/var/lib/caddy`, `/etc/systemd/system/caddy.service`, the `# flypanel-managed begin|end` block in `/etc/caddy/Caddyfile`, and possibly the added global `{ metrics }` block;
+5. ufw/firewall-cmd rules: SSH port, 80, 443, 8443; `ufw --force enable`;
+6. CentOS: `semanage port` for 8443 and 3002;
+7. packages (`curl ca-certificates unzip ufw iproute2` / `curl ca-certificates unzip firewalld policycoreutils-python-utils iproute`);
 8. `/var/log/flypanel-install.log`.
 
-## Решение по данным (выбор пользователя)
+## Decision on data (user's choice)
 
-`/opt/flypanel/data` удаляется целиком, включая `panel.db` — без архива и без бэкапа. Защита от случайного запуска: интерактивно требуется ввести слово `delete`; `--yes` пропускает вопрос.
+`/opt/flypanel/data` is removed entirely, including `panel.db` — no archive, no backup. Protection against an accidental run: interactively you must type the word `delete`; `--yes` skips the question.
 
-## Что удаляется и что нет
+## What is deleted and what is not
 
-| Объект | Действие |
+| Object | Action |
 |---|---|
-| юнит `flypanel`, `caddy` (наш) | stop, disable, `rm`, `daemon-reload` |
-| `/opt/flypanel` целиком | `rm -rf` (данные тоже) |
-| юзеры `flypanel`, `caddy` | `userdel` (без `-r`: домашние каталоги уже снесены) |
-| `/usr/local/bin/caddy` | удалить |
-| наш блок в Caddyfile | вырезать; если в файле не осталось ничего, кроме глобального `{ metrics }`, — удалить файл и каталог `/etc/caddy` |
-| `/var/lib/caddy` | удалить |
-| правила фаервола 80/443/8443 | удалить (`ufw delete allow`, `firewall-cmd --permanent --remove-port`) |
-| правило SSH-порта | **не трогаем** (риск лок-аута) |
-| `ufw`/`firewalld` | **не выключаем** (не знаем, был ли включён до установки; молча снять защиту хуже, чем оставить) |
-| пакеты | удаляем только те, что поставил установщик (список в `$PANEL_DIR/installed-packages`); предустановленные не трогаем, `--keep-packages` оставляет все |
-| `semanage port` 8443/3002 | удалить (только CentOS, только если порт помечен `http_port_t`) |
-| `/var/log/flypanel-install.log` | удалить вместе с логом деинсталляции |
+| unit `flypanel`, `caddy` (ours) | stop, disable, `rm`, `daemon-reload` |
+| `/opt/flypanel` entirely | `rm -rf` (data included) |
+| users `flypanel`, `caddy` | `userdel` (without `-r`: home directories are already gone) |
+| `/usr/local/bin/caddy` | delete |
+| our block in the Caddyfile | cut out; if nothing but the global `{ metrics }` is left in the file, delete the file and the `/etc/caddy` directory |
+| `/var/lib/caddy` | delete |
+| firewall rules 80/443/8443 | delete (`ufw delete allow`, `firewall-cmd --permanent --remove-port`) |
+| SSH port rule | **not touched** (lockout risk) |
+| `ufw`/`firewalld` | **not disabled** (we do not know whether it was on before the install; silently removing protection is worse than leaving it) |
+| packages | delete only those the installer added (the list in `$PANEL_DIR/installed-packages`); preinstalled ones are not touched, `--keep-packages` keeps all |
+| `semanage port` 8443/3002 | delete (CentOS only, only if the port is labelled `http_port_t`) |
+| `/var/log/flypanel-install.log` | delete together with the uninstall log |
 
-Чужая конфигурация Caddy (сайты не от нас, чужой глобальный блок) не трогается: если маркеров `flypanel-managed` нет, файл остаётся как есть, скрипт об этом говорит.
+Someone else's Caddy configuration (sites that are not ours, a foreign global block) is not touched: if there are no `flypanel-managed` markers, the file stays as is and the script says so.
 
-## Флаги
+## Flags
 
-`--lang ru|en|de`, `--yes`, `--dry-run`, `--skip-firewall`, `--force` (продолжать при непонятном состоянии), `-h`.
-`--dry-run` только печатает шаги, ничего не меняя; любые «страшные» состояния там — предупреждения, а не выход.
+`--lang ru|en|de`, `--yes`, `--dry-run`, `--skip-firewall`, `--keep-packages`, `--force` (keep going on unclear state), `-h`.
+`--dry-run` only prints the steps without changing anything; any “scary” state is a warning there, not an exit.
 
-## Шаги скрипта
+## Script steps
 
-1. root-проверка (до открытия лога), выбор языка, баннер + предупреждение, что данные исчезнут.
-2. Подтверждение: слово `delete` (или `--yes`).
-3. `systemctl stop flypanel` → xray умирает вместе с cgroup.
-4. `systemctl stop caddy`, `systemctl disable flypanel caddy`, `rm` юнитов, `daemon-reload`.
-5. Caddyfile: вырезать managed-блок awk-ом; пустой остаток → удалить файл и `/etc/caddy`.
+1. root check (before the log is opened), language selection, banner + a warning that data will be lost.
+2. Confirmation: the word `delete` (or `--yes`).
+3. `systemctl stop flypanel` → xray dies with the cgroup.
+4. `systemctl stop caddy`, `systemctl disable flypanel caddy`, `rm` the units, `daemon-reload`.
+5. Caddyfile: cut the managed block with awk; if the remainder is empty → delete the file and `/etc/caddy`.
 6. `/opt/flypanel` → `rm -rf`; `/usr/local/bin/caddy`, `/var/lib/caddy` → `rm -rf`.
-7. `userdel flypanel`, `userdel caddy` (если существуют и не заняты процессами).
-8. Фаервол: удалить 80/443/8443, SSH-порт оставить; `--skip-firewall` пропускает шаг.
-9. CentOS: `semanage port -d` для 8443 и 3002, если помечены нашим типом.
-10. Логи: удалить `/var/log/flypanel-install.log`, затем сам лог деинсталляции.
-11. Итог: что удалено, что оставлено намеренно (SSH-правило и то, что было до установки).
+7. `userdel flypanel`, `userdel caddy` (if they exist and hold no processes).
+8. Firewall: delete 80/443/8443, keep the SSH port; `--skip-firewall` skips the step.
+9. CentOS: `semanage port -d` for 8443 and 3002, if they carry our label.
+10. Logs: delete `/var/log/flypanel-install.log`, then the uninstall log itself.
+11. Result: what was deleted, what was left on purpose (the SSH rule and everything that existed before the install).
 
-## Не-цели
+## Non-goals
 
-- не откатывать DNS/ACME-сертификаты;
-- не удалять пакеты, которых не было до установки, и не выключать чужой фаервол;
-- не работать на чужих ОС: Ubuntu 24.04 / CentOS Stream 9-10, amd64 (как установщик);
-- не «частичное» удаление по флагам (кроме `--skip-firewall`).
+- not rolling back DNS/ACME certificates;
+- not deleting packages that were not there before the install, and not disabling someone else's firewall;
+- not working on foreign OSes: Ubuntu 22.04/24.04 / CentOS Stream 9-10, amd64 (same as the installer);
+- no “partial” removal by flags (except `--skip-firewall`).
 
-## Проверка
+## Verification
 
 1. `bash -n`, shellcheck.
-2. Юнит-тесты в `scripts/uninstall_test.sh` (тот же приём `INSTALL_LIB_ONLY`-подобного sourcing-гарда): вырезание managed-блока (есть/нет/чужой сайт), решение «удалять ли Caddyfile» (только `{ metrics }` → удалить), `--dry-run` ничего не создаёт и не удаляет.
-3. Живой прогон на VM `home-fly` (Ubuntu 24.04, установлено v0.1.2): после деинсталляции — нет юзера, нет `/opt/flypanel`, нет юнитов, `ss -ltn` без 3002/10811/8443, Caddyfile отсутствует, ufw активен без наших портов; повторный запуск — «нечего удалять», exit 0.
-4. Затем повторная установка тем же `install.sh` на очищенной машине — должна пройти с нуля (проверка, что деинсталлятор ничего не сломал системе).
-5. Публикация: `scripts/uninstall.sh` добавляется в релизные ассеты CI, README получает раздел «Uninstall».
-## Результаты проверки (VM home-fly, Ubuntu 24.04)
+2. Unit tests in `scripts/uninstall_test.sh` (the same `INSTALL_LIB_ONLY`-like sourcing guard trick): cutting out the managed block (present/absent/foreign site), the “delete the Caddyfile or not” decision (only `{ metrics }` → delete), `--dry-run` creates and deletes nothing.
+3. A live run on the VM `<host>` (Ubuntu 24.04, v0.1.2 installed): after uninstall — no user, no `/opt/flypanel`, no units, `ss -ltn` without 3002/10811/8443, no Caddyfile, ufw active without our ports; a second run — “nothing to remove”, exit 0.
+4. Then a reinstall with the same `install.sh` on the cleaned machine — it must go through from scratch (a check that the uninstaller did not break anything on the system).
+5. Publishing: `scripts/uninstall.sh` is added to the CI release assets, the README gets an “Uninstall” section.
+## Verification results (VM `<host>`, Ubuntu 24.04)
 
-- `scripts/uninstall_test.sh`: 14 проверок, 0 падений (bash 5 на VM; на macOS bash 3.2 ассоциативных массивов не умеет).
-- Живой прогон на установке v0.1.2: юзер `flypanel` удалён, `/opt/flypanel` отсутствует, оба юнита сняты, порты 3002/10811/8443 свободны, `https://devbydev.crazedns.ru` не отвечает, `ufw` остался активен, из правил осталось только `22/tcp`, сервис `flypanel` и `caddy` — inactive.
-- Повторный прогон: «Удалять нечего: панель не установлена», exit 0. Запуск без root: «Нужен root», exit 1, до открытия лога.
-- Найдено и исправлено на живом прогоне: бекапы `/etc/caddy/Caddyfile.bak-*` (их делает установщик) не давали удалить каталог. Теперь при удалении нашего Caddyfile они удаляются вместе с ним (покрыто тестом 5).
-- Обратная установка тем же опубликованным `install.sh` (v0.1.2, sha256 `323537c5…`) на очищенную машину: все 13 шагов «готово», HTTPS 200, `flypanel` и `caddy` active, ufw снова 22/80/443/8443, сертификат Let's Encrypt выдан заново, admin создан, `flypanel version` → `v0.1.2`.
+- `scripts/uninstall_test.sh`: 14 checks, 0 failures (bash 5 on the VM; macOS bash 3.2 cannot do associative arrays).
+- Live run on a v0.1.2 install: user `flypanel` removed, `/opt/flypanel` gone, both units removed, ports 3002/10811/8443 free, `https://panel.example.org` does not respond, `ufw` still active, only `22/tcp` left among the rules, services `flypanel` and `caddy` — inactive.
+- Second run: “Nothing to remove: flypanel is not installed.”, exit 0. A non-root run: “Root required”, exit 1, before the log is opened.
+- Found and fixed on the live run: the `/etc/caddy/Caddyfile.bak-*` backups (made by the installer) prevented the directory from being deleted. Now, when our Caddyfile is deleted, they go with it (covered by test 5).
+- A reverse install with the same published `install.sh` (v0.1.2, sha256 `323537c5…`) on the cleaned machine: all 13 steps “done”, HTTPS 200, `flypanel` and `caddy` active, ufw again 22/80/443/8443, a Let's Encrypt certificate issued again, admin created, `flypanel version` → `v0.1.2`.

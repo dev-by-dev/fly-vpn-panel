@@ -1,42 +1,43 @@
-# Календарь в поле «Действует до»
+# Calendar in the «Действует до» field
 
-## Задача
+## Task
 
-В диалоге пользователя дата окончания вводилась полем `datetime-local`: календарь
-в Chrome открывался, но в тёмной теме поле выглядело как обычный инпут и дата с
-временем были склеены в одну строку.
+In the user dialog the expiry date was entered with a `datetime-local` field: the
+calendar opened in Chrome, but in the dark theme the field looked like a plain
+input and the date and time were glued into one line.
 
-## Решение
+## Solution
 
 `web/src/lib/components/UserDialog.svelte`:
 
-- состояние разделено на `expiryDate` (`YYYY-MM-DD`) и `expiryTime` (`HH:MM`),
-  оба берутся из начального значения (`toLocalInput(...)`), по умолчанию +30 дней;
-- в секции «Настройки доступа» вместо одного поля — `Input type="date"` (нативный
-  календарь Chrome) и `Input type="time"` рядом;
-- при отправке собирается `new Date(`${expiryDate}T${expiryTime || '00:00'}`)` и
-  уходит в API как ISO.
+- the state is split into `expiryDate` (`YYYY-MM-DD`) and `expiryTime` (`HH:MM`),
+  both taken from the initial value (`toLocalInput(...)`), +30 days by default;
+- in the «Настройки доступа» section, instead of a single field there is
+  `Input type="date"` (the native Chrome calendar) and `Input type="time"` next
+  to it;
+- on submit `new Date(`${expiryDate}T${expiryTime || '00:00'}`)` is assembled and
+  sent to the API as ISO.
 
-## Проверка
+## Verification
 
-- `npm run check` — 0 ошибок (12 старых предупреждений), `npx vitest run` — 22/22.
-- Браузер: диалог «Создать пользователя» показывает дату `2026-12-21` и время
-  `21:13`; создание пользователя сохраняет `expiry = 2026-12-21T18:13:00Z`, то
-  есть 21:13 локального времени (UTC+3) — дата и время не теряются.
+- `npm run check` — 0 errors (12 pre-existing warnings), `npx vitest run` — 22/22.
+- Browser: the «Создать пользователя» dialog shows the date `2026-12-21` and the
+  time `21:13`; creating the user stores `expiry = 2026-12-21T18:13:00Z`, that
+  is 21:13 local time (UTC+3) — date and time are not lost.
 
-## Вне рамок
+## Out of scope
 
-- Собственный календарь на bits-ui (нативный `type="date"` даёт тот же выпадающий
-  календарь без новой зависимости).
-## Продолжение: свой календарь-поповер
+- A custom calendar on bits-ui (the native `type="date"` gives the same dropdown
+  calendar without a new dependency).
+## Continuation: a custom calendar popover
 
-Нативные `date`/`time` заменены на поповер в стиле Remnawave: слева пресеты
-«+1 месяц», «+3 месяца», «+1 год», «до 2099 года», справа календарь с
-переключением месяцев, сеткой 6×7 с понедельника (выходные красным, выбранный
-день подсвечен), внизу время и кнопка подтверждения.
+The native `date`/`time` were replaced with a Remnawave-style popover: presets
+«+1 месяц», «+3 месяца», «+1 год», «до 2099 года» on the left, a calendar with
+month switching, a 6×7 grid starting on Monday (weekends in red, the selected day
+highlighted) on the right, and the time plus a confirm button at the bottom.
 
-Поповер открывается вверх (`bottom-full`), пока он открыт у панели диалога
-`overflow-visible`, иначе прокрутка обрезала календарь.
+The popover opens upwards (`bottom-full`), and while it is open the dialog panel
+is `overflow-visible`, otherwise scrolling clipped the calendar.
 
-Проверка: `svelte-check` 0 ошибок / 12 предупреждений, vitest 22/22, скриншот
-поповера — пресеты, сетка, выбор дня и подтверждение видны полностью.
+Verification: `svelte-check` 0 errors / 12 warnings, vitest 22/22, a screenshot of
+the popover — presets, grid, day selection and confirmation fully visible.

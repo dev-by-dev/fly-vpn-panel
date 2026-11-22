@@ -1,53 +1,53 @@
-# Карточки «Пользователи» на «Главной»
+# «Пользователи» cards on «Главная»
 
-## Задача
+## Task
 
-Пользователь отклонил карточки онлайн-устройств: на «Главной» нужна общая
-статистика по пользователям в виде ряда карточек — как в Remnawave:
-иконка в цветном квадрате, подпись, крупное число.
+The user rejected the online-device cards: «Главная» needs overall
+user statistics as a row of cards — like in Remnawave:
+an icon in a colored square, a label, a large number.
 
-## Решение
+## Solution
 
-- Блок «Онлайн-устройства» удалён с «Главной» (вместе с `/api/stats/online`,
-  типом Device и `fmtDate`); бэкенд-маршрут остаётся.
-- Счётчики считаются на клиенте из `GET /api/users` (список больше не режется
-  до 100 — резался только ради селекта графика):
+- The «Онлайн-устройства» block removed from «Главная» (together with `/api/stats/online`,
+  the Device type and `fmtDate`); the backend route remains.
+- Counters are computed on the client from `GET /api/users` (the list is no longer cut
+  to 100 — it was cut only for the chart select):
   - Expired — `expiry <= now`;
-  - Limited — `quota_bytes > 0 && used_bytes >= quota_bytes` и не expired;
-  - Disabled — `disabled` и не expired/limited;
-  - Active — остальные.
-- Ряд карточек `flex flex-wrap gap-2` с иконками: Всего (синяя), Active
-  (зелёная, пульс), Expired (красная, часы), Limited (янтарная, песочные часы),
-  Disabled (серая, запрет).
+  - Limited — `quota_bytes > 0 && used_bytes >= quota_bytes` and not expired;
+  - Disabled — `disabled` and not expired/limited;
+  - Active — the rest.
+- Card row `flex flex-wrap gap-2` with icons: «Всего» (blue), Active
+  (green, pulse), Expired (red, clock), Limited (amber, hourglass),
+  Disabled (gray, ban).
 
-## Проверка
+## Verification
 
-- `svelte-check` — 0 ошибок, 12 прежних предупреждений.
-- Локальная панель: «Всего 1 / Active 1 / Expired 0 / Limited 0 / Disabled 0».
-- Селект графика по-прежнему показывает юзеров.
+- `svelte-check` — 0 errors, 12 previous warnings.
+- Local panel: «Всего 1 / Active 1 / Expired 0 / Limited 0 / Disabled 0».
+- The chart select still shows users.
 
-## Вне рамок
+## Out of scope
 
-- Серверная агрегация счётчиков отдельным эндпоинтом.
+- Server-side aggregation of counters in a separate endpoint.
 
-## Дополнение: значки в карточках «Сервер»
+## Addendum: icons in the «Сервер» cards
 
-Карточки ЦПУ, ОЗУ, диска, трафика и xray получили ту же сетку, что и
-«Пользователи»: цветная иконка в квадрате, справа подпись, крупное значение и
-уточняющая строка. Цвета: ЦПУ — голубой, ОЗУ — фиолетовый, диск — янтарный,
-трафик — синий, xray — зелёный/красный по состоянию.
+The CPU, RAM, disk, traffic and xray cards got the same grid as
+«Пользователи»: a colored icon in a square, label on the right, a large value and
+a clarifying line. Colors: CPU — cyan, RAM — violet, disk — amber,
+traffic — blue, xray — green/red by state.
 
-## Дополнение: статус xray кружком
+## Addendum: xray status as a dot
 
-Надпись «Работает/Остановлен» в карточке xray заменена на цветной кружок
-(зелёный/красный/серый), текст остался в `title`/`aria-label`. Версия и кнопки
-без изменений.
+The «Работает/Остановлен» text in the xray card was replaced by a colored dot
+(green/red/gray), the text stayed in `title`/`aria-label`. Version and buttons
+unchanged.
 
-## Дополнение: версия xray цифрами
+## Addendum: xray version as numbers
 
-`xray version` печатает «Xray 26.11.9 (Xray, Penetrates Everything.) 676eaf6 …»;
-в карточку попадала вся строка. Теперь `parseVersion` вытаскивает номер
-(`\d+\.\d+\.\d+`) из первой строки, fallback — строка как есть (заглушка в тестах).
+`xray version` prints "Xray 26.11.9 (Xray, Penetrates Everything.) 676eaf6 …";
+the whole line ended up in the card. Now `parseVersion` extracts the number
+(`\d+\.\d+\.\d+`) from the first line, fallback — the line as is (test stub).
 
-Проверка: `TestParseVersion` (реальная строка xray, тестовая заглушка, строка без
-номера) и `TestManagerStartStop` ожидает «25.11.20».
+Verification: `TestParseVersion` (real xray line, test stub, a line without a
+number) and `TestManagerStartStop` expects «25.11.20».

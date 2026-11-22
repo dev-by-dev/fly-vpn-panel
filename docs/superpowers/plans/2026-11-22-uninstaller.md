@@ -293,8 +293,8 @@ Expected: no output, exit 0.
 
 - [ ] **Step 4: Live run on the VM**
 
-Copy `scripts/uninstall.sh` to `home-fly`, run `sudo -n bash uninstall.sh --yes --lang ru`. Then assert: `id flypanel` fails, `[ ! -d /opt/flypanel ]`, `systemctl status flypanel` unknown, `ss -ltn` has no 3002/10811/8443, `/etc/caddy/Caddyfile` gone, `ufw status` still active without 80/443/8443, `https://devbydev.crazedns.ru` unreachable. Re-run the script → `nothing to remove`, exit 0.
-Then reinstall from the published asset: `sudo -n bash install.sh --yes --lang ru --domain devbydev.crazedns.ru`, confirm all 13 steps pass, HTTPS 200, create admin, and record both results in the spec's verification section.
+Copy `scripts/uninstall.sh` to `<host>`, run `sudo -n bash uninstall.sh --yes --lang ru`. Then assert: `id flypanel` fails, `[ ! -d /opt/flypanel ]`, `systemctl status flypanel` unknown, `ss -ltn` has no 3002/10811/8443, `/etc/caddy/Caddyfile` gone, `ufw status` still active without 80/443/8443, `https://panel.example.org` unreachable. Re-run the script → `nothing to remove`, exit 0.
+Then reinstall from the published asset: `sudo -n bash install.sh --yes --lang ru --domain panel.example.org`, confirm all 13 steps pass, HTTPS 200, create admin, and record both results in the spec's verification section.
 
 - [ ] **Step 5: Commit and release**
 

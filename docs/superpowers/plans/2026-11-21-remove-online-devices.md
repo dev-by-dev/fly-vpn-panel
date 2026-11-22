@@ -1,23 +1,24 @@
-# Убрать «Онлайн-устройства» с главной страницы
+# Remove «Онлайн-устройства» from the main page
 
-## Задача
+## Task
 
-Блок «Онлайн-устройства» на «Главной» не нужен: пользователь попросил убрать его
-с главного экрана.
+The «Онлайн-устройства» block on «Главная» is not needed: the user asked to remove it
+from the main screen.
 
-## Решение
+## Solution
 
-- `web/src/routes/Dashboard.svelte`: удалён блок таблицы, тип `Device`, состояние
-  `devices`, хелпер `fmtDate` и запрос `/api/stats/online` из `loadRest`.
-- Бэкенд не менялся: `GET /api/stats/online` остаётся доступным для API.
+- `web/src/routes/Dashboard.svelte`: the table block removed, the `Device` type, the
+  `devices` state, the `fmtDate` helper and the `/api/stats/online` request removed
+  from `loadRest`.
+- Backend unchanged: `GET /api/stats/online` remains available for the API.
 
-## Проверка
+## Verification
 
-- `svelte-check` — 0 ошибок (12 прежних предупреждений).
-- Браузер: на «Главной» остались только «Сервер» и «Трафик панели», текста
-  «Онлайн-устройства» нет.
-- `vitest`, `go test ./...` — без изменений.
+- `svelte-check` — 0 errors (12 previous warnings).
+- Browser: only «Сервер» and «Трафик панели» remain on «Главная», there is no
+  «Онлайн-устройства» text.
+- `vitest`, `go test ./...` — unchanged.
 
-## Вне рамок
+## Out of scope
 
-- Удаление эндпоинта `/api/stats/online` из API.
+- Removing the `/api/stats/online` endpoint from the API.

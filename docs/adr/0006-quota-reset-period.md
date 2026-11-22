@@ -2,33 +2,33 @@
 
 **Date**: 2026-11-20
 **Status**: accepted
-**Deciders**: владелец продукта (выбор в builder-round 20.11.2026) + агент-оператор
+**Deciders**: product owner (choice in builder-round 20.11.2026) + agent-operator
 
 ## Context
 
-Юзер приходит из Remnawave, где лимит трафика обычно с периодом сброса. Builder-check дизайн-дока выявил: семантика квоты (пожизненная vs сбрасываемая, что считается, возврат после отключения) меняет схему БД и логику enforcement — угадывать нельзя.
+Users come from Remnawave, where the traffic limit usually has a reset period. A builder-check of the design doc revealed: quota semantics (lifetime vs resettable, what counts, restoration after disabling) change the DB schema and the enforcement logic — guessing is not allowed.
 
 ## Decision
 
-Квота на юзера: `quota_bytes` (**up+down суммарно**, 0 = безлимит) + `quota_period` (none | day | week | month) + `quota_reset_at`. Периодный счётчик = сумма дельт из traffic_samples с начала периода. Превышение → горячее отключение (RemoveUser + disabled_reason=quota). Начало нового периода → счётчик обнуляется + **авто-включение**. Админ может сбросить/поднять лимит вручную → авто-включение. none = пожизненный лимит (возврат только вручную).
+Per-user quota: `quota_bytes` (**up+down combined**, 0 = unlimited) + `quota_period` (none | day | week | month) + `quota_reset_at`. The periodic counter = the sum of deltas from traffic_samples since the period start. Exceeding → hot disable (RemoveUser + disabled_reason=quota). Start of a new period → the counter resets + **auto re-enable**. The admin can reset/raise the limit manually → auto re-enable. none = lifetime limit (restored manually only).
 
 ## Alternatives Considered
 
-### Alternative 1: пожизненная квота + ручной сброс
-- **Pros**: проще всего — одно поле, одна ветка enforcement.
-- **Cons**: не совпадает с ожиданием «лимит с ресетом» из Remnawave; каждый период админ вручную сбрасывает.
-- **Why not**: пользователь явно выбрал период + авто-сброс.
+### Alternative 1: lifetime quota + manual reset
+- **Pros**: simplest of all — one field, one enforcement branch.
+- **Cons**: does not match the "limit with reset" expectation from Remnawave; the admin resets manually every period.
+- **Why not**: the user explicitly chose a period + auto-reset.
 
 ## Consequences
 
 ### Positive
-- Совпадает с привычкой Remnawave, честные повторяющиеся лимиты.
-- Авто-возврат без ручных действий админа.
+- Matches the Remnawave habit, honest repeating limits.
+- Auto-restore without manual admin action.
 
 ### Negative
-- Доп. поля (period, reset_at, disabled_reason) + логика rollover в поллере.
-- Счётчик выводится из samples (или колонка) — деталь схемы за билдером.
+- Extra fields (period, reset_at, disabled_reason) + rollover logic in the poller.
+- The counter is derived from samples (or a column) — a schema detail left to the builder.
 
 ### Risks
-- Пропуск rollover при простое панели → проверка `now ≥ quota_reset_at` на каждом поллинге и при старте.
-- Двойное отключение/включение (гонка поллера и ручных действий) → один писатель + явный disabled_reason.
+- Missed rollover while the panel is down → check `now ≥ quota_reset_at` on every poll and at startup.
+- Double disable/enable (race between the poller and manual actions) → single writer + explicit disabled_reason.
