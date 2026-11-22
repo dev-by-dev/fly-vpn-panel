@@ -25,6 +25,13 @@ function initialLang(): Lang {
 
 export const i18n = $state({ lang: initialLang() });
 
+// Тег для toLocaleString/Intl: даты и месяцы форматирует сам браузер.
+const dateTags: Record<Lang, string> = { ru: 'ru-RU', en: 'en-GB', de: 'de-DE' };
+
+export function dateTag(): string {
+  return dateTags[i18n.lang];
+}
+
 export function setLang(lang: Lang): void {
   i18n.lang = lang;
   localStorage.setItem('lang', lang);

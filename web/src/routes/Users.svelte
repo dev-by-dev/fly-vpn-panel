@@ -4,6 +4,8 @@
   import { Button } from '$lib/components/ui/button';
   import UserDialog from '$lib/components/UserDialog.svelte';
   import { usersIntent } from '$lib/usersIntent.svelte';
+  import { dateTag, t } from '$lib/i18n.svelte';
+  import { fmtBytes } from '$lib/traffic';
 
   type UserRow = {
     id: number;
@@ -50,13 +52,13 @@
     try {
       const res = await apiFetch('/api/devices');
       if (!res.ok) {
-        devicesErr = `Не удалось загрузить устройства (${res.status})`;
+        devicesErr = t('users.devicesLoadFail', { status: res.status });
         return;
       }
       devices = (await res.json()) as DeviceRow[];
       devicesErr = '';
     } catch {
-      devicesErr = 'Сеть недоступна';
+      devicesErr = t('common.network');
     }
   }
 
@@ -74,17 +76,19 @@
     void loadDevices();
   });
 
-  const statusLabels: Record<string, string> = {
-    quota: 'Квота',
-    device_limit: 'Лимит устройств',
-    expired: 'Истёк',
-    manual: 'Отключён',
-  };
-
   // Отключённый юзер без причины всё равно «Отключён», не «Активен».
   function statusLabel(u: UserRow): string {
-    if (!u.disabled) return 'Активен';
-    return statusLabels[u.disabled_reason] ?? 'Отключён';
+    if (!u.disabled) return t('users.statusActive');
+    switch (u.disabled_reason) {
+      case 'quota':
+        return t('users.statusQuota');
+      case 'device_limit':
+        return t('users.statusDeviceLimit');
+      case 'expired':
+        return t('users.statusExpired');
+      default:
+        return t('users.statusDisabled');
+    }
   }
 
   // Счётчики для карточек: причины отключения не пересекаются.
@@ -98,14 +102,6 @@
     }
     return s;
   });
-
-  function fmtBytes(n: number): string {
-    if (n <= 0) return '0 Б';
-    const units = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
-    const i = Math.min(units.length - 1, Math.floor(Math.log(n) / Math.log(1024)));
-    const v = (n / 1024 ** i).toFixed(i === 0 ? 0 : 1).replace(/\.0$/, '');
-    return `${v} ${units[i]}`;
-  }
 
   function pct(u: UserRow): number {
     if (u.quota_bytes <= 0) return 0;
@@ -125,32 +121,32 @@
   }
 
   function fmtAgo(iso: string): string {
-    const t = Date.parse(iso);
-    if (!t) return 'никогда';
-    const s = Math.max(0, Math.round((Date.now() - t) / 1000));
-    if (s < 60) return 'несколько секунд назад';
+    const ts = Date.parse(iso);
+    if (!ts) return t('users.never');
+    const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+    if (s < 60) return t('users.agoNow');
     const m = Math.round(s / 60);
-    if (m < 60) return `${m} мин назад`;
+    if (m < 60) return t('users.agoMin', { n: m });
     const h = Math.round(m / 60);
-    if (h < 24) return `${h} ч назад`;
-    return `${Math.round(h / 24)} дн назад`;
+    if (h < 24) return t('users.agoHour', { n: h });
+    return t('users.agoDay', { n: Math.round(h / 24) });
   }
 
   function fmtDate(iso: string): string {
-    return new Date(iso).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
+    return new Date(iso).toLocaleString(dateTag(), { dateStyle: 'short', timeStyle: 'short' });
   }
 
   async function load() {
     try {
       const res = await apiFetch('/api/users');
       if (!res.ok) {
-        error = `Не удалось загрузить (${res.status})`;
+        error = t('users.loadFail', { status: res.status });
         return;
       }
       users = (await res.json()) as UserRow[];
       error = '';
     } catch {
-      error = 'Сеть недоступна';
+      error = t('common.network');
     }
   }
 
@@ -167,7 +163,7 @@
   }
 
   async function remove(u: UserRow) {
-    if (!confirm(`Удалить ${u.username}?`)) return;
+    if (!confirm(t('users.confirmDelete', { name: u.username }))) return;
     await apiFetch(`/api/users/${u.id}`, { method: 'DELETE' });
     sub = null;
     await load();
@@ -189,11 +185,11 @@
 </script>
 
 <div class="flex items-center justify-between">
-  <h1 class="text-2xl font-semibold">Пользователи</h1>
+  <h1 class="text-2xl font-semibold">{t('users.title')}</h1>
   {#if !showDevices}
     <div class="flex gap-2">
-      <Button variant="outline" onclick={load}>Обновить</Button>
-      <Button onclick={() => (dialog = 'create')}>Добавить</Button>
+      <Button variant="outline" onclick={load}>{t('common.refresh')}</Button>
+      <Button onclick={() => (dialog = 'create')}>{t('users.add')}</Button>
     </div>
   {/if}
 </div>
@@ -214,7 +210,7 @@
       </svg>
     </span>
     <div>
-      <div class="text-sm text-muted-foreground">Всего</div>
+      <div class="text-sm text-muted-foreground">{t('users.statTotal')}</div>
       <div class="text-2xl font-semibold leading-none">{stats.total}</div>
     </div>
   </div>
@@ -225,7 +221,7 @@
       </svg>
     </span>
     <div>
-      <div class="text-sm text-muted-foreground">Активные</div>
+      <div class="text-sm text-muted-foreground">{t('users.statActive')}</div>
       <div class="text-2xl font-semibold leading-none">{stats.active}</div>
     </div>
   </div>
@@ -236,7 +232,7 @@
       </svg>
     </span>
     <div>
-      <div class="text-sm text-muted-foreground">Истекли</div>
+      <div class="text-sm text-muted-foreground">{t('users.statExpired')}</div>
       <div class="text-2xl font-semibold leading-none">{stats.expired}</div>
     </div>
   </div>
@@ -247,7 +243,7 @@
       </svg>
     </span>
     <div>
-      <div class="text-sm text-muted-foreground">Квота</div>
+      <div class="text-sm text-muted-foreground">{t('users.statQuota')}</div>
       <div class="text-2xl font-semibold leading-none">{stats.limited}</div>
     </div>
   </div>
@@ -258,7 +254,7 @@
       </svg>
     </span>
     <div>
-      <div class="text-sm text-muted-foreground">Отключены</div>
+      <div class="text-sm text-muted-foreground">{t('users.statDisabled')}</div>
       <div class="text-2xl font-semibold leading-none">{stats.disabled}</div>
     </div>
   </div>
@@ -268,14 +264,14 @@
   <table class="w-full text-sm">
     <thead class="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
       <tr>
-        <th class="px-3 py-2 font-medium">Юзернейм</th>
+        <th class="px-3 py-2 font-medium">{t('users.colUsername')}</th>
         <th class="px-3 py-2 font-medium">ID</th>
           <th class="px-3 py-2 font-medium">Σ</th>
-        <th class="px-3 py-2 font-medium">Статус</th>
-        <th class="px-3 py-2 font-medium">Онлайн</th>
-        <th class="px-3 py-2 font-medium">Истекает</th>
-        <th class="px-3 py-2 font-medium">Израсходовано</th>
-        <th class="px-3 py-2 font-medium">Действия</th>
+        <th class="px-3 py-2 font-medium">{t('users.colStatus')}</th>
+        <th class="px-3 py-2 font-medium">{t('users.colOnline')}</th>
+        <th class="px-3 py-2 font-medium">{t('users.colExpiry')}</th>
+        <th class="px-3 py-2 font-medium">{t('users.colUsed')}</th>
+        <th class="px-3 py-2 font-medium">{t('users.colActions')}</th>
       </tr>
     </thead>
     <tbody>
@@ -324,15 +320,15 @@
           </td>
           <td class="px-3 py-2">
             <div class="flex flex-wrap gap-1">
-              <Button size="xs" variant="outline" onclick={() => showSub(u)}>Подписка</Button>
-              <Button size="xs" variant="outline" onclick={() => resetQuota(u)}>Сброс квоты</Button>
-              <Button size="xs" variant="outline" onclick={() => (dialog = u)}>Изменить</Button>
-              <Button size="xs" variant="destructive" onclick={() => remove(u)}>Удалить</Button>
+              <Button size="xs" variant="outline" onclick={() => showSub(u)}>{t('users.btnSub')}</Button>
+              <Button size="xs" variant="outline" onclick={() => resetQuota(u)}>{t('users.btnResetQuota')}</Button>
+              <Button size="xs" variant="outline" onclick={() => (dialog = u)}>{t('users.btnEdit')}</Button>
+              <Button size="xs" variant="destructive" onclick={() => remove(u)}>{t('users.btnDelete')}</Button>
             </div>
           </td>
         </tr>
       {:else}
-        <tr><td class="px-3 py-4 text-muted-foreground" colspan="7">Пользователей нет</td></tr>
+        <tr><td class="px-3 py-4 text-muted-foreground" colspan="7">{t('users.empty')}</td></tr>
       {/each}
     </tbody>
   </table>
@@ -341,10 +337,10 @@
 {:else}
   <div class="mt-4 rounded-xl border border-sky-500/20 bg-sky-500/5 p-4">
     <div class="flex items-center justify-between">
-      <h2 class="font-medium">HWID / устройства</h2>
+      <h2 class="font-medium">{t('users.devicesTitle')}</h2>
       <div class="flex gap-2">
-        <Button size="xs" variant="outline" onclick={loadDevices}>Обновить</Button>
-        <Button size="xs" variant="outline" onclick={() => (showDevices = false)}>К списку</Button>
+        <Button size="xs" variant="outline" onclick={loadDevices}>{t('common.refresh')}</Button>
+        <Button size="xs" variant="outline" onclick={() => (showDevices = false)}>{t('users.backToList')}</Button>
       </div>
     </div>
     {#if devicesErr}
@@ -354,17 +350,17 @@
       <table class="w-full text-sm">
         <thead class="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
           <tr>
-            <th class="px-3 py-2 font-medium">Юзер</th>
+            <th class="px-3 py-2 font-medium">{t('users.colUser')}</th>
             <th class="px-3 py-2 font-medium">ID</th>
-            <th class="px-3 py-2 font-medium">IP</th>
-            <th class="px-3 py-2 font-medium">Страна</th>
-            <th class="px-3 py-2 font-medium">Провайдер</th>
-            <th class="px-3 py-2 font-medium">Платформа</th>
-            <th class="px-3 py-2 font-medium">Версия</th>
-            <th class="px-3 py-2 font-medium">Модель</th>
-            <th class="px-3 py-2 font-medium">User-Agent</th>
-            <th class="px-3 py-2 font-medium">Первый вход</th>
-            <th class="px-3 py-2 font-medium">Активность</th>
+            <th class="px-3 py-2 font-medium">{t('users.colIp')}</th>
+            <th class="px-3 py-2 font-medium">{t('users.colCountry')}</th>
+            <th class="px-3 py-2 font-medium">{t('users.colProvider')}</th>
+            <th class="px-3 py-2 font-medium">{t('users.colPlatform')}</th>
+            <th class="px-3 py-2 font-medium">{t('users.colVersion')}</th>
+            <th class="px-3 py-2 font-medium">{t('users.colModel')}</th>
+            <th class="px-3 py-2 font-medium">{t('users.colUa')}</th>
+            <th class="px-3 py-2 font-medium">{t('users.colFirstSeen')}</th>
+            <th class="px-3 py-2 font-medium">{t('users.colActivity')}</th>
           </tr>
         </thead>
         <tbody>
@@ -386,7 +382,7 @@
               <td class="px-3 py-2 font-mono text-xs">
                 {d.IP}
                 {#if d.same_ip}
-                  <span class="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground">тот же IP</span>
+                  <span class="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground">{t('users.sameIp')}</span>
                 {/if}
               </td>
               <td class="px-3 py-2 text-xs">{flagOf(d.Country)} {d.Country || '—'}</td>
@@ -403,7 +399,7 @@
               </td>
             </tr>
           {:else}
-            <tr><td class="px-3 py-2 text-muted-foreground" colspan="11">Устройств пока нет</td></tr>
+            <tr><td class="px-3 py-2 text-muted-foreground" colspan="11">{t('users.noDevices')}</td></tr>
           {/each}
         </tbody>
       </table>
@@ -413,10 +409,10 @@
 
 {#if sub}
   <div class="mt-4 rounded-xl border border-sky-500/20 bg-sky-500/5 p-4">
-    <h2 class="font-medium">Подписка: {sub.username}</h2>
+    <h2 class="font-medium">{t('users.subTitle', { name: sub.username })}</h2>
     <div class="mt-2 flex items-center gap-2">
       <code class="flex-1 break-all rounded bg-muted px-2 py-1 text-xs">{sub.url}</code>
-      <Button size="sm" variant="outline" onclick={copyUrl}>{copied ? 'Скопировано' : 'Копировать'}</Button>
+      <Button size="sm" variant="outline" onclick={copyUrl}>{copied ? t('users.copied') : t('users.copy')}</Button>
     </div>
     <div class="mt-2 flex flex-wrap gap-3 text-sm">
       {#each sub.formats as f (f)}

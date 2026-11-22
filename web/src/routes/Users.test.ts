@@ -2,6 +2,7 @@ import { test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/svelte';
 import Users from './Users.svelte';
 import { usersIntent } from '$lib/usersIntent.svelte';
+import { setLang } from '$lib/i18n.svelte';
 
 // Anonymized fixtures (public repo): fake uuids/tokens, RFC3339 timestamps.
 const alice = {
@@ -118,4 +119,14 @@ test('устройства за одним IP: одна зелёная точк�
   expect(container.querySelectorAll('.bg-emerald-400').length).toBe(1);
   expect(container.querySelectorAll('.bg-slate-500').length).toBe(1);
   expect(container.querySelectorAll('.bg-red-400').length).toBe(1);
+});
+
+test('английский язык переводит таблицу юзеров', async () => {
+  setLang('en');
+  render(Users);
+
+  expect(await screen.findByText('Users')).toBeTruthy();
+  expect(screen.getByText('Username')).toBeTruthy();
+  expect(screen.queryByText('Пользователи')).toBeNull();
+  setLang('ru');
 });
