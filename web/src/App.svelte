@@ -5,6 +5,7 @@
   import { authState, checkSession, logout } from '$lib/auth.svelte';
   import { usersIntent } from '$lib/usersIntent.svelte';
   import { inboundsIntent } from '$lib/inboundsIntent.svelte';
+  import { i18n, langs, setLang, t } from '$lib/i18n.svelte';
   import { Button } from '$lib/components/ui/button';
   import Login from './routes/Login.svelte';
   import Dashboard from './routes/Dashboard.svelte';
@@ -28,13 +29,13 @@
   };
 
   const nav = [
-    { href: '#/', path: '/', label: 'Главная' },
-    { href: '#/users', path: '/users', label: 'Юзеры' },
-    { href: '#/inbounds', path: '/inbounds', label: 'Inbounds' },
-    { href: '#/templates', path: '/templates', label: 'Шаблоны' },
-    { href: '#/settings', path: '/settings', label: 'Настройки' },
-    { href: '#/config', path: '/config', label: 'Конфиг' },
-  ];
+    { href: '#/', path: '/', labelKey: 'nav.home' },
+    { href: '#/users', path: '/users', labelKey: 'nav.users' },
+    { href: '#/inbounds', path: '/inbounds', labelKey: 'nav.inbounds' },
+    { href: '#/templates', path: '/templates', labelKey: 'nav.templates' },
+    { href: '#/settings', path: '/settings', labelKey: 'nav.settings' },
+    { href: '#/config', path: '/config', labelKey: 'nav.config' },
+  ] as const;
 
   // Выпадающее меню вкладки «Inbounds».
   let inbMenu = $state(false);
@@ -76,7 +77,7 @@
                   : 'border-transparent text-muted-foreground'}"
                 onclick={() => (usersMenu = !usersMenu)}
               >
-                {item.label} ▾
+                {t(item.labelKey)} ▾
               </button>
               {#if usersMenu}
                 <div class="absolute left-0 top-full z-40 w-56 rounded-xl border bg-card p-1 shadow-lg">
@@ -86,7 +87,7 @@
                     onclick={() => {
                       usersIntent.view = 'list';
                       usersMenu = false;
-                    }}>Юзеры</a
+                    }}>{t('nav.users.list')}</a
                   >
                   <button
                     type="button"
@@ -95,7 +96,7 @@
                       usersIntent.view = 'devices';
                       usersMenu = false;
                       window.location.hash = '#/users';
-                    }}>HWID / устройства</button
+                    }}>{t('nav.users.devices')}</button
                   >
                 </div>
               {/if}
@@ -118,14 +119,14 @@
                     : 'border-transparent text-muted-foreground'}"
                   onclick={() => (inbMenu = !inbMenu)}
                 >
-                  {item.label} ▾
+                  {t(item.labelKey)} ▾
                 </button>
                 {#if inbMenu}
                   <div class="absolute left-0 top-full z-40 w-56 rounded-xl border bg-card p-1 shadow-lg">
                     <a
                       href="#/inbounds"
                       class="block rounded px-2 py-1.5 text-sm hover:bg-muted"
-                      onclick={() => (inbMenu = false)}>Инбаунды</a
+                      onclick={() => (inbMenu = false)}>{t('nav.inbounds.list')}</a
                     >
                     <button
                       type="button"
@@ -134,7 +135,7 @@
                         inboundsIntent.action = 'create';
                         inbMenu = false;
                         window.location.hash = '#/inbounds';
-                      }}>Добавить inbound</button
+                      }}>{t('nav.inbounds.create')}</button
                     >
                     <button
                       type="button"
@@ -143,7 +144,7 @@
                         inboundsIntent.action = 'metrics';
                         inbMenu = false;
                         window.location.hash = '#/inbounds';
-                      }}>Метрики</button
+                      }}>{t('nav.inbounds.metrics')}</button
                     >
                   </div>
                 {/if}
@@ -157,12 +158,25 @@
                 }}
                 class="-mb-px shrink-0 border-b-2 px-3 py-4 text-sm hover:text-foreground"
               >
-                {item.label}
+                {t(item.labelKey)}
               </a>
             {/if}
           {/each}
         </nav>
-        <Button variant="outline" size="sm" class="shrink-0" onclick={() => logout()}>Выйти</Button>
+        <div class="flex shrink-0 items-center gap-1 pr-2">
+          {#each langs as l (l)}
+            <button
+              type="button"
+              class="rounded px-1.5 py-1 text-xs uppercase {i18n.lang === l
+                ? 'bg-muted font-semibold text-foreground'
+                : 'text-muted-foreground hover:text-foreground'}"
+              onclick={() => setLang(l)}>{l.toUpperCase()}</button
+            >
+          {/each}
+        </div>
+        <Button variant="outline" size="sm" class="shrink-0" onclick={() => logout()}
+          >{t('nav.logout')}</Button
+        >
       </div>
     </header>
     <main class="min-w-0 flex-1 p-6">
