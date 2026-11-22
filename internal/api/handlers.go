@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"flypanel/internal/monitoring"
 	"io"
 	"log"
 	"net/http"
@@ -46,6 +47,8 @@ type Handlers struct {
 	EntryIP string
 	// DataDir is the filesystem whose free space the main page shows.
 	DataDir string
+	// Monitor reads panel logs; nil when the platform has no journalctl.
+	Monitor *monitoring.Reader
 
 	// interval is the live poll interval (also drives the
 	// /api/stats/online window); the settings PUT updates it.

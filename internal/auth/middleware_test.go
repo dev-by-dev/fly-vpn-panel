@@ -53,6 +53,8 @@ func TestMiddlewareAPIToken(t *testing.T) {
 		{"read token blocks inbounds", http.MethodGet, "/api/inbounds", "fp_read", "", 403, false},
 		{"read token blocks config subpath", http.MethodGet, "/api/config/outbound", "fp_read", "", 403, false},
 		{"read token allows inbounds metrics", http.MethodGet, "/api/inbounds/metrics", "fp_read", "", 200, true},
+		{"read token blocks monitoring logs", http.MethodGet, "/api/monitoring/logs", "fp_read", "", 403, false},
+		{"read token blocks monitoring caddy", http.MethodGet, "/api/monitoring/caddy", "fp_read", "", 403, false},
 		{"read token allows stats", http.MethodGet, "/api/stats/summary", "fp_read", "", 200, true},
 		{"expired token", http.MethodGet, "/api/stats/summary", "fp_expired", "", 401, false},
 		{"revoked token", http.MethodGet, "/api/stats/summary", "fp_revoked", "", 401, false},

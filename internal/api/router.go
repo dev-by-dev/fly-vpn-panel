@@ -22,6 +22,7 @@ import (
 	"flypanel/internal/auth"
 	"flypanel/internal/config"
 	"flypanel/internal/inbounds"
+	"flypanel/internal/monitoring"
 	"flypanel/internal/stats"
 	"flypanel/internal/store"
 	"flypanel/internal/sub"
@@ -50,6 +51,8 @@ type Deps struct {
 	Manager Manager
 	Cfg     *config.Config
 	Poller  *stats.Poller
+	// Monitor reads log sources; optional (nil in most tests).
+	Monitor *monitoring.Reader
 }
 
 // NewRouter builds the full panel HTTP handler. Only
@@ -64,7 +67,7 @@ func NewRouter(d Deps) http.Handler {
 	usersH := &users.Handlers{Store: d.Store, Client: d.Client, PollInterval: interval}
 	subH := &sub.Handlers{Store: d.Store, EntryIP: d.Cfg.EntryIP}
 	apiH := &Handlers{
-		Store: d.Store, Mgr: d.Manager, Poller: d.Poller,
+		Store: d.Store, Mgr: d.Manager, Poller: d.Poller, Monitor: d.Monitor,
 		PanelDomain: d.Cfg.PanelDomain, EntryIP: d.Cfg.EntryIP, interval: interval,
 		Client:  d.Client,
 		DataDir: d.Cfg.DataDir,
@@ -127,6 +130,9 @@ func NewRouter(d Deps) http.Handler {
 	p.HandleFunc("GET /api/tokens", apiH.ListTokens)
 	p.HandleFunc("POST /api/tokens", apiH.CreateToken)
 	p.HandleFunc("DELETE /api/tokens/{id}", apiH.RevokeToken)
+
+	p.HandleFunc("GET /api/monitoring/logs", apiH.MonitoringLogs)
+	p.HandleFunc("GET /api/monitoring/caddy", apiH.MonitoringCaddy)
 
 	p.HandleFunc("GET /api/settings", apiH.SettingsGet)
 	p.HandleFunc("PUT /api/settings", apiH.SettingsPut)

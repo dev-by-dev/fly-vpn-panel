@@ -81,7 +81,7 @@ func readDenied(path string) bool {
 	if path == "/api/inbounds/metrics" {
 		return false
 	}
-	if strings.HasPrefix(path, "/api/inbounds") || strings.HasPrefix(path, "/api/config") {
+	if strings.HasPrefix(path, "/api/inbounds") || strings.HasPrefix(path, "/api/config") || strings.HasPrefix(path, "/api/monitoring") {
 		return true
 	}
 	return path == "/api/users" || strings.HasPrefix(path, "/api/users/")
