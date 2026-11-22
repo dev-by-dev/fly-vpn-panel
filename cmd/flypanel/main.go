@@ -18,6 +18,7 @@ import (
 	"flypanel/internal/auth"
 	"flypanel/internal/config"
 	"flypanel/internal/inbounds"
+	"flypanel/internal/monitoring"
 	"flypanel/internal/stats"
 	"flypanel/internal/store"
 	"flypanel/internal/xray"
@@ -96,6 +97,7 @@ func serveCommand() {
 	defer stop()
 	go poller.Run(ctx)
 	go stats.RunBackup(ctx, st, cfg.DataDir)
+	go monitoring.RunScraper(ctx, st, cfg.CaddyAdminURL, 15*time.Second, log.Printf)
 
 	srv := &http.Server{
 		Addr: cfg.ListenAddr,

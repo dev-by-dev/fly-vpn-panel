@@ -30,6 +30,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.CookieSecure {
 		t.Error("CookieSecure = true, want false by default")
 	}
+	if cfg.CaddyAdminURL != "http://127.0.0.1:2019" {
+		t.Errorf("CaddyAdminURL = %q, want default", cfg.CaddyAdminURL)
+	}
 	if cfg.EntryIP != "" || cfg.EgressIP != "" || cfg.PanelDomain != "" {
 		t.Errorf("IP/domain fields not empty: %+v", cfg)
 	}
@@ -60,5 +63,20 @@ func TestLoadEnvFile(t *testing.T) {
 	}
 	if cfg.DataDir != "./data" {
 		t.Errorf("DataDir = %q, want default %q", cfg.DataDir, "./data")
+	}
+}
+
+func TestLoadCaddyAdminURL(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), ".env")
+	if err := os.WriteFile(envPath, []byte("CADDY_ADMIN_URL=http://127.0.0.1:3019\n"), 0o600); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+	t.Setenv("FLYPANEL_ENV", envPath)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	if cfg.CaddyAdminURL != "http://127.0.0.1:3019" {
+		t.Errorf("CaddyAdminURL = %q", cfg.CaddyAdminURL)
 	}
 }

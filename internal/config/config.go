@@ -20,6 +20,8 @@ type Config struct {
 	PanelDomain     string
 	PollIntervalSec int
 	CookieSecure    bool
+	// CaddyAdminURL is Caddy's admin API root; /metrics lives under it.
+	CaddyAdminURL string
 }
 
 // Load reads the env file (path from FLYPANEL_ENV, default ./.env) and
@@ -30,6 +32,7 @@ func Load() (*Config, error) {
 		ListenAddr:      "127.0.0.1:3002",
 		XrayBin:         "./bin/xray",
 		PollIntervalSec: 30,
+		CaddyAdminURL:   "http://127.0.0.1:2019",
 	}
 	path := os.Getenv("FLYPANEL_ENV")
 	if path == "" {
@@ -79,6 +82,8 @@ func (c *Config) set(key, value string) error {
 		c.EgressIP = value
 	case "PANEL_DOMAIN":
 		c.PanelDomain = value
+	case "CADDY_ADMIN_URL":
+		c.CaddyAdminURL = value
 	case "POLL_INTERVAL_SEC":
 		if value == "" {
 			return nil
