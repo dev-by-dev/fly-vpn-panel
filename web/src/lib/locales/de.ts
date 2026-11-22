@@ -289,6 +289,9 @@ const de: Record<keyof typeof ru, string> = {
   'settings.errName': 'Namen eingeben (max. 64 Zeichen)',
   'settings.saved': 'Gespeichert',
   'settings.qrAlt': '2FA-QR-Code',
+  'chart.up': 'Upload',
+  'chart.down': 'Download',
+  'chart.empty': 'Keine Daten für diesen Zeitraum',
 };
 
 export default de;

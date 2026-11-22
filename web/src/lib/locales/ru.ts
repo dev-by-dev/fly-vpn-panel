@@ -287,4 +287,7 @@ export default {
   'settings.errName': 'Укажите название (до 64 символов)',
   'settings.saved': 'Сохранено',
   'settings.qrAlt': 'QR код 2FA',
+  'chart.up': 'Отдача',
+  'chart.down': 'Загрузка',
+  'chart.empty': 'Нет данных за период',
 } as const;

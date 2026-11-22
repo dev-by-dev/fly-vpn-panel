@@ -289,6 +289,9 @@ const en: Record<keyof typeof ru, string> = {
   'settings.errName': 'Enter a name (max 64 characters)',
   'settings.saved': 'Saved',
   'settings.qrAlt': '2FA QR code',
+  'chart.up': 'Upload',
+  'chart.down': 'Download',
+  'chart.empty': 'No data for this period',
 };
 
 export default en;

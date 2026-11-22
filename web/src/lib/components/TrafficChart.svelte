@@ -3,6 +3,7 @@
   // Без CSS uPlot не позиционирует ось/легенду: они наезжают на график и соседние блоки.
   import 'uplot/dist/uPlot.min.css';
   import { toSeries, fmtBytes, fmtRate, type Bucket } from '$lib/traffic';
+  import { i18n, t } from '$lib/i18n.svelte';
 
   let {
     buckets = [],
@@ -13,10 +14,23 @@
   // rate=true: данные уже в бит/с, оси и подсказки — fmtRate.
   const fmt = (v: number) => (rate ? fmtRate(v) : fmtBytes(v));
 
+  // uPlot рисует легенду сам: после смены языка обновляем подписи вручную.
+  $effect(() => {
+    void i18n.lang;
+    if (!chart) return;
+    chart.series[1].label = t('chart.up');
+    chart.series[2].label = t('chart.down');
+  });
+
   let el = $state<HTMLDivElement | null>(null);
   // chart — non-reactive: mutated imperatively, $effect pushes data into it.
   // Structural type: пакет uplot отдаёт класс через `export =`, InstanceType на нём не выводится.
-  type Chart = { setData(d: number[][]): void; setSize(s: { width: number; height: number }): void; destroy(): void };
+  type Chart = {
+    setData(d: number[][]): void;
+    setSize(s: { width: number; height: number }): void;
+    destroy(): void;
+    series: Array<{ label: string }>;
+  };
   let chart: Chart | null = null;
 
   const opts = (h: number) => ({
@@ -26,13 +40,13 @@
     series: [
       {},
       {
-        label: 'Отдача',
+        label: t('chart.up'),
         stroke: '#34d399',
         fill: 'rgba(52,211,153,0.15)',
         value: (u: unknown, v: number) => (v == null ? '—' : fmt(v)),
       },
       {
-        label: 'Загрузка',
+        label: t('chart.down'),
         stroke: '#60a5fa',
         fill: 'rgba(96,165,250,0.15)',
         value: (u: unknown, v: number) => (v == null ? '—' : fmt(v)),
@@ -114,7 +128,7 @@
   {#if buckets.length === 0}
     <!-- пустые данные → uPlot рисует шкалу от 1970 года, поэтому сам график скрыт -->
     <p class="absolute inset-0 grid place-items-center text-sm text-muted-foreground">
-      Нет данных за период
+      {t('chart.empty')}
     </p>
   {/if}
 </div>
