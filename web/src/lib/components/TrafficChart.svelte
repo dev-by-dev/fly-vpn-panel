@@ -3,7 +3,7 @@
   // Без CSS uPlot не позиционирует ось/легенду: они наезжают на график и соседние блоки.
   import 'uplot/dist/uPlot.min.css';
   import { toSeries, fmtBytes, fmtRate, type Bucket } from '$lib/traffic';
-  import { i18n, t } from '$lib/i18n.svelte';
+  import { dateTag, i18n, t } from '$lib/i18n.svelte';
 
   let {
     buckets = [],
@@ -13,14 +13,6 @@
 
   // rate=true: данные уже в бит/с, оси и подсказки — fmtRate.
   const fmt = (v: number) => (rate ? fmtRate(v) : fmtBytes(v));
-
-  // uPlot рисует легенду сам: после смены языка обновляем подписи вручную.
-  $effect(() => {
-    void i18n.lang;
-    if (!chart) return;
-    chart.series[1].label = t('chart.up');
-    chart.series[2].label = t('chart.down');
-  });
 
   let el = $state<HTMLDivElement | null>(null);
   // chart — non-reactive: mutated imperatively, $effect pushes data into it.
@@ -32,6 +24,9 @@
     series: Array<{ label: string }>;
   };
   let chart: Chart | null = null;
+  let UPlotMod: (new (conf: unknown, data: number[][], node: HTMLElement) => Chart) & {
+    paths: { spline(): unknown };
+  } | null = null;
 
   const opts = (h: number) => ({
     width: 0, // set after mount from el.clientWidth
@@ -63,9 +58,13 @@
           const span = splits.length > 1 ? splits[splits.length - 1] - splits[0] : 0;
           return splits.map((s) => {
             const d = new Date(s * 1000);
-            const time = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', hour12: false });
+            const time = d.toLocaleTimeString(dateTag(), {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            });
             return span > 86400
-              ? `${d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })} ${time}`
+              ? `${d.toLocaleDateString(dateTag(), { day: '2-digit', month: '2-digit' })} ${time}`
               : time;
           });
         },
@@ -82,24 +81,36 @@
     legend: { live: false },
   });
 
+  // uPlot с live:false не перерисовывает легенду, поэтому на смену языка
+  // график пересобираем целиком: иначе подписи остаются на старом языке.
+  async function build() {
+    const node = el;
+    if (!node) return;
+    // Dynamic import: uPlot touches canvas/DOM APIs, browser-only.
+    UPlotMod ??= (await import('uplot')).default as unknown as typeof UPlotMod;
+    if (!UPlotMod || !el) return;
+    const conf = opts(height);
+    // Плавные линии: monotone cubic из uPlot (без выбросов за пределы данных).
+    const spline = UPlotMod.paths.spline();
+    (conf.series[1] as Record<string, unknown>).paths = spline;
+    (conf.series[2] as Record<string, unknown>).paths = spline;
+    conf.width = node.clientWidth || 600;
+    const data = toSeries(buckets);
+    chart?.destroy();
+    // типы uplot 1.6.32 не описывают setSize, в рантайме метод есть
+    chart = new UPlotMod(conf, data, node);
+  }
+
+  $effect(() => {
+    // Легенда зависит от языка: язык поменялся — пересобираем график.
+    void i18n.lang;
+    if (chart) void build();
+  });
+
   onMount(() => {
     const node = el;
     if (!node) return;
-    let dead = false;
-    void (async () => {
-      // Dynamic import: uPlot touches canvas/DOM APIs, browser-only.
-      const UPlot = (await import('uplot')).default;
-      if (dead) return;
-      const conf = opts(height);
-      // Плавные линии: monotone cubic из uPlot (без выбросов за пределы данных).
-      // Типы `export = uPlot` не отдают статик paths на default-импорте, в рантайме он есть.
-      const spline = (UPlot as unknown as { paths: { spline(): unknown } }).paths.spline();
-      (conf.series[1] as Record<string, unknown>).paths = spline;
-      (conf.series[2] as Record<string, unknown>).paths = spline;
-      conf.width = node.clientWidth || 600;
-      // типы uplot 1.6.32 не описывают setSize, в рантайме метод есть
-      chart = new UPlot(conf, toSeries(buckets), node) as unknown as Chart;
-    })();
+    void build();
     // uPlot ширина задаётся при создании: без ResizeObserver график вылезает из карточки при ресайзе.
     const ro = new ResizeObserver(([e]) => {
       const w = Math.floor(e.contentRect.width);
@@ -107,7 +118,6 @@
     });
     ro.observe(node);
     return () => {
-      dead = true;
       ro.disconnect();
       chart?.destroy();
       chart = null;
