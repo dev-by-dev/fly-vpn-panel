@@ -12,6 +12,7 @@
   import Users from './routes/Users.svelte';
   import Inbounds from './routes/Inbounds.svelte';
   import Templates from './routes/Templates.svelte';
+  import Monitoring from './routes/Monitoring.svelte';
   import Settings from './routes/Settings.svelte';
   import Config from './routes/Config.svelte';
 
@@ -23,6 +24,7 @@
     '/inbounds': Inbounds,
     '/routing': Config,
     '/templates': Templates,
+    '/monitoring': Monitoring,
     '/settings': Settings,
     '/config': Config,
     '/login': Login,
@@ -33,6 +35,7 @@
     { href: '#/users', path: '/users', labelKey: 'nav.users' },
     { href: '#/inbounds', path: '/inbounds', labelKey: 'nav.inbounds' },
     { href: '#/templates', path: '/templates', labelKey: 'nav.templates' },
+    { href: '#/monitoring', path: '/monitoring', labelKey: 'nav.monitoring' },
     { href: '#/settings', path: '/settings', labelKey: 'nav.settings' },
     { href: '#/config', path: '/config', labelKey: 'nav.config' },
   ] as const;

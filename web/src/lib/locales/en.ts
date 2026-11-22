@@ -292,6 +292,17 @@ const en: Record<keyof typeof ru, string> = {
   'chart.up': 'Upload',
   'chart.down': 'Download',
   'chart.empty': 'No data for this period',
+	'nav.monitoring': 'Monitoring',
+	'monitor.title': 'Monitoring',
+	'monitor.logs': 'Logs',
+	'monitor.caddy': 'Caddy',
+	'monitor.auto': 'Auto-refresh (5 s)',
+	'monitor.empty': 'No entries',
+	'monitor.loadFail': 'Failed to load logs ({status})',
+	'monitor.caddyEmpty': 'No data yet',
+	'errors.journal_unavailable': 'systemd journal unavailable',
+	'errors.invalid_source': 'Unknown log source',
+	'errors.invalid_range': 'Unknown range',
 };
 
 export default en;
