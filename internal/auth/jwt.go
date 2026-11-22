@@ -71,3 +71,14 @@ func hashToken(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])
 }
+
+// IssueAPIToken returns a new long-lived API token ("fp_" + 32 random bytes
+// base64url) together with its storage hash.
+func IssueAPIToken() (raw, hash string, err error) {
+	b := make([]byte, 32)
+	if _, err = rand.Read(b); err != nil {
+		return "", "", err
+	}
+	raw = "fp_" + base64.RawURLEncoding.EncodeToString(b)
+	return raw, hashToken(raw), nil
+}

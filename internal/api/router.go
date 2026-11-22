@@ -133,7 +133,7 @@ func NewRouter(d Deps) http.Handler {
 		jsonError(w, http.StatusNotFound, "not found")
 	})
 
-	mux.Handle("/api/", auth.Middleware(d.JWT)(p))
+	mux.Handle("/api/", auth.Middleware(d.JWT, d.Store)(p))
 	mux.HandleFunc("/", serveSPA)
 	return mux
 }

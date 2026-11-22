@@ -407,7 +407,7 @@ func TestMiddleware(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	h := Middleware(j)(next)
+	h := Middleware(j, nil)(next)
 
 	do := func(token string) int {
 		req := httptest.NewRequest(http.MethodGet, "/api/anything", nil)
