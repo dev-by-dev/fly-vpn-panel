@@ -14,6 +14,7 @@ SKIP_FIREWALL=false
 FORCE=false
 LANG_SEL=${LANG_SEL:-}
 FAMILY=""
+CADDY_OURS=false
 
 declare -A MSG_RU=(
   [welcome]="Удаление панели flypanel"
@@ -126,6 +127,107 @@ run() {
 word_ok() { [ "${1:-}" = delete ]; }
 
 remove_path() { [ -e "$1" ] || return 0; run rm -rf "$1"; }
+
+# caddyfile_has_content: true when something other than a leading global
+# block (and comments/blanks) is left in the file.
+caddyfile_has_content() {
+  awk '
+    function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
+    { line = trim($0) }
+    line == "" || line ~ /^#/ { next }
+    ing == 0 && line == "{" { ing = 1; next }
+    ing == 1 { if (line == "}") ing = 0; next }
+    { found = 1 }
+    END { exit found ? 0 : 1 }
+  ' "$1"
+}
+
+# caddyfile_strip PATH -> 0 file kept without our block, 1 our file removed,
+# 2 no markers (foreign config, untouched).
+caddyfile_strip() {
+  local path=$1
+  [ -f "$path" ] || return 2
+  grep -q '^# flypanel-managed begin[[:space:]]*$' "$path" || return 2
+  local tmp
+  tmp=$(mktemp)
+  awk '
+    /^# flypanel-managed begin[[:space:]]*$/ { skip = 1; next }
+    /^# flypanel-managed end[[:space:]]*$/   { skip = 0; next }
+    !skip { print }
+  ' "$path" > "$tmp"
+  if ! caddyfile_has_content "$tmp"; then
+    rm -f "$tmp"
+    remove_path "$path"
+    run rmdir -- "$(dirname "$path")" 2>/dev/null || true
+    return 1
+  fi
+  if $DRY_RUN; then
+    printf '   %s rewrite %s\n' "$(t dry)" "$path"
+    rm -f "$tmp"
+    return 0
+  fi
+  cat "$tmp" > "$path"
+  rm -f "$tmp"
+  # Caddy runs as its own user: the file must stay world-readable.
+  chmod 644 "$path" 2>/dev/null || true
+  return 0
+}
+
+stop_units() {
+  step step_units
+  local u unit
+  for u in flypanel caddy; do
+    unit=/etc/systemd/system/$u.service
+    if [ ! -f "$unit" ]; then continue; fi
+    if [ "$u" = caddy ] && ! grep -q '/usr/local/bin/caddy' "$unit"; then
+      # Foreign caddy: keep it, and keep its binary and user too.
+      continue
+    fi
+    [ "$u" = caddy ] && CADDY_OURS=true
+    if systemctl is-active --quiet "$u"; then run systemctl stop "$u"; fi
+    if systemctl is-enabled --quiet "$u" >/dev/null 2>&1; then run systemctl disable "$u"; fi
+    remove_path "$unit"
+  done
+  run systemctl daemon-reload
+  ok
+}
+
+remove_caddy_config() {
+  step step_caddy
+  local file=/etc/caddy/Caddyfile rc=0
+  if [ ! -f "$file" ]; then say skip; return 0; fi
+  caddyfile_strip "$file" || rc=$?
+  case $rc in
+    0) say caddy_kept ;;
+    2) say caddy_foreign ;;
+  esac
+  ok
+}
+
+remove_files() {
+  step step_files
+  remove_path "$PANEL_DIR"
+  if $CADDY_OURS; then
+    remove_path /usr/local/bin/caddy
+    remove_path /var/lib/caddy
+  fi
+  ok
+}
+
+remove_users() {
+  step step_user
+  local u removed=0
+  for u in flypanel caddy; do
+    if [ "$u" = caddy ] && ! $CADDY_OURS; then continue; fi
+    if ! id -u "$u" >/dev/null 2>&1; then continue; fi
+    if run userdel "$u"; then
+      removed=1
+    elif ! $FORCE; then
+      sayf err_user_busy "$u"
+    fi
+  done
+  if [ "$removed" -eq 1 ] || $DRY_RUN; then ok; else say skip; fi
+}
 
 main() { :; }
 
