@@ -58,6 +58,7 @@ After=network.target
 Type=simple
 User=flypanel
 Group=flypanel
+SupplementaryGroups=systemd-journal
 WorkingDirectory=/opt/flypanel
 Environment=FLYPANEL_ENV=/opt/flypanel/.env
 ExecStart=/opt/flypanel/bin/flypanel serve
@@ -74,6 +75,11 @@ WantedBy=multi-user.target
 `systemctl daemon-reload && systemctl enable --now flypanel`.
 **`PrivateTmp=true` is REQUIRED** — `ProtectSystem=strict` makes `/tmp`
 read-only and xray config validation writes a temp file there (pitfall #2).
+
+`SupplementaryGroups=systemd-journal` lets the panel read `journalctl` for the
+«Мониторинг → Логи» view. Without it the page shows
+«Журнал systemd недоступен» (backend 502 `journal_unavailable`) and everything
+else keeps working. Apply with `systemctl daemon-reload && systemctl restart flypanel`.
 
 ## 4. Admin
 Operator runs interactively over SSH (password never in chat/logs):
@@ -96,15 +102,30 @@ ufw default deny incoming; ufw default allow outgoing; ufw --force enable
 - Install Caddy from the official cloudsmith repo (native, not Docker).
 - `/etc/caddy/Caddyfile` (backup first: `cp -a Caddyfile Caddyfile.bak-YYYYMMDD`):
   ```
+  {
+      metrics
+  }
+
   <PANEL_DOMAIN> {
+      log
       reverse_proxy 127.0.0.1:3002
   }
   ```
+  The global `metrics` block enables Caddy's own Prometheus counters — the panel
+  scrapes them every 15 s from `http://127.0.0.1:2019/metrics` into SQLite for
+  «Мониторинг → Caddy». Without it the admin endpoint still answers but has no
+  `caddy_http_requests_total`, and the view stays at «Данных пока нет».
+  `log` writes the JSON access log to stderr → journald, where the logs view reads it.
 - `caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile`
 - `systemctl reload caddy` (breaks established panel connections; on a fresh
   single-site server no quiet window needed). Caddy auto-obtains Let's Encrypt
   cert via HTTP-01 (port 80). Verify `curl -sI https://<PANEL_DOMAIN>/` → 200
   and the body is the built SPA (hashed `/assets/index-*.js`), not the placeholder.
+- Metrics check: `curl -s http://127.0.0.1:2019/metrics | grep -c caddy_http_requests_total`
+  → non-zero after a request to the panel. `CADDY_ADMIN_URL` overrides the default
+  `http://127.0.0.1:2019` if Caddy's admin API listens elsewhere.
+- Logs check: «Мониторинг → Логи» shows lines for `server`, `caddy` and `xray`
+  (the last one appears only after xray logs a warning/error).
 
 ## 7. E2E verification
 - Create a test user in the UI; fetch `/sub/<token>` in all 4 formats
@@ -147,8 +168,14 @@ left untouched.
    (which re-wraps it), else devices stay empty and device-limit enforcement
    sees zero online IPs.
 
+8. **Caddy HTTP metrics are off until `{ metrics }` is added** to the global
+   Caddyfile block. The panel cannot edit `/etc/caddy` (ReadWritePaths) — this is
+   an operator step, and the Caddy view stays empty until it is done.
+
 ## Notes
-- xray logs to journal/stdout (loglevel warning); no access-log file by default.
+- xray writes warnings and errors to `data/xray-error.log` (truncated at 5 MB on
+  the next config apply); stdout/stderr still go to journald.
+- Caddy logs go to journald; the panel reads them through the systemd-journal group.
 - Validate captures CombinedOutput (xray writes config errors to stdout).
 - Daily SQLite backup via `VACUUM INTO data/backups/panel-YYYYMMDD.db` (keep 7).
 - Poller startup races xray listen for one tick (connection refused) then
