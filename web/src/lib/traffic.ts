@@ -1,3 +1,5 @@
+import { t } from './i18n.svelte';
+
 // Bucket mirrors store.Bucket (Go, no json tags → capitalized keys).
 export type Bucket = { TS: string; Up: number; Down: number };
 
@@ -18,15 +20,21 @@ export function fmtUptime(ns: number): string {
   const d = Math.floor(s / 86400);
   const h = Math.floor((s % 86400) / 3600);
   const m = Math.floor((s % 3600) / 60);
-  if (d > 0) return `${d}д ${h}ч`;
-  if (h > 0) return `${h}ч ${m}м`;
-  if (m > 0) return `${m}м ${s % 60}с`;
-  return `${s}с`;
+  if (d > 0) return `${d}${t('units.d')} ${h}${t('units.h')}`;
+  if (h > 0) return `${h}${t('units.h')} ${m}${t('units.m')}`;
+  if (m > 0) return `${m}${t('units.m')} ${s % 60}${t('units.s')}`;
+  return `${s}${t('units.s')}`;
 }
 
 export function fmtBytes(n: number): string {
-  if (n <= 0) return '0 Б';
-  const units = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
+  const units = [
+    t('units.byte'),
+    t('units.kb'),
+    t('units.mb'),
+    t('units.gb'),
+    t('units.tb'),
+  ];
+  if (n <= 0) return `0 ${units[0]}`;
   const i = Math.min(units.length - 1, Math.floor(Math.log(n) / Math.log(1024)));
   const v = (n / 1024 ** i).toFixed(i === 0 ? 0 : 1).replace(/\.0$/, '');
   return `${v} ${units[i]}`;
@@ -34,9 +42,9 @@ export function fmtBytes(n: number): string {
 
 // Bits per second → human bit rate (сеть принято мерить в битах).
 export function fmtRate(bps: number): string {
-  if (!(bps > 0)) return '0 бит/с';
-  if (bps < 1e3) return `${Math.round(bps)} бит/с`;
-  const units = ['Кбит/с', 'Мбит/с', 'Гбит/с'];
+  if (!(bps > 0)) return `0 ${t('units.bps')}`;
+  if (bps < 1e3) return `${Math.round(bps)} ${t('units.bps')}`;
+  const units = [t('units.kbps'), t('units.mbps'), t('units.gbps')];
   const i = Math.min(units.length - 1, Math.floor(Math.log(bps) / Math.log(1000)) - 1);
   return `${(bps / 1000 ** (i + 1)).toFixed(1).replace(/\.0$/, '')} ${units[i]}`;
 }

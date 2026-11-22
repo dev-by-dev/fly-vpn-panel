@@ -1,5 +1,6 @@
 <script lang="ts">
   import { login, authState } from '$lib/auth.svelte';
+  import { t } from '$lib/i18n.svelte';
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
   import { Label } from '$lib/components/ui/label';
@@ -24,7 +25,7 @@
     const ok = await login(username, password, authState.need2fa ? code : undefined);
     busy = false;
     if (!ok && !authState.need2fa) {
-      error = 'Неверный логин, пароль или код';
+      error = t('login.failed');
     }
   }
 </script>
@@ -32,16 +33,16 @@
 <Card class="w-80">
   <CardHeader>
     <CardTitle class="text-xl">flypanel</CardTitle>
-    <CardDescription>Вход в панель управления</CardDescription>
+    <CardDescription>{t('login.subtitle')}</CardDescription>
   </CardHeader>
   <CardContent>
     <form onsubmit={submit} class="flex flex-col gap-4">
       <div class="flex flex-col gap-2">
-        <Label for="username">Логин</Label>
+        <Label for="username">{t('login.username')}</Label>
         <Input id="username" bind:value={username} autocomplete="username" required />
       </div>
       <div class="flex flex-col gap-2">
-        <Label for="password">Пароль</Label>
+        <Label for="password">{t('login.password')}</Label>
         <Input
           id="password"
           type="password"
@@ -52,14 +53,14 @@
       </div>
       {#if authState.need2fa}
         <div class="flex flex-col gap-2">
-          <Label for="code">Код 2FA (TOTP или резервный)</Label>
+          <Label for="code">{t('login.code')}</Label>
           <Input id="code" bind:value={code} autocomplete="one-time-code" required />
         </div>
       {/if}
       {#if error}
         <p class="text-sm text-destructive">{error}</p>
       {/if}
-      <Button type="submit" disabled={busy}>{busy ? 'Вход…' : 'Войти'}</Button>
+      <Button type="submit" disabled={busy}>{busy ? t('login.busy') : t('login.submit')}</Button>
     </form>
   </CardContent>
 </Card>
