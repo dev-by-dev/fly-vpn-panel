@@ -15,10 +15,33 @@ const enroll = {
 };
 
 let totpEnabled = false;
+let tokens = [
+  { id: 1, name: 'ci', scope: 'read', expires_at: '', created_at: '2026-11-22T10:00:00Z', revoked: false },
+];
 
 function mockFetch() {
   return vi.fn((input: string | URL, init?: RequestInit) => {
     const url = String(input);
+    if (url === '/api/tokens' && (!init || init.method === undefined || init.method === 'GET')) {
+      return Promise.resolve(new Response(JSON.stringify({ tokens }), { status: 200 }));
+    }
+    if (url === '/api/tokens' && init?.method === 'POST') {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            id: 2,
+            name: 'ci',
+            scope: 'full',
+            expires_at: '2026-12-22T00:00:00Z',
+            token: 'fp_testtoken',
+          }),
+          { status: 201 }
+        )
+      );
+    }
+    if (/^\/api\/tokens\/\d+$/.test(url) && init?.method === 'DELETE') {
+      return Promise.resolve(new Response(null, { status: 204 }));
+    }
     if (url === '/api/settings' && (!init || init.method === undefined || init.method === 'GET')) {
       return Promise.resolve(
         new Response(JSON.stringify({ poll_interval_sec: 30, totp_enabled: totpEnabled }), { status: 200 })
@@ -38,6 +61,9 @@ let fetchMock: ReturnType<typeof mockFetch>;
 
 beforeEach(() => {
   totpEnabled = false;
+  tokens = [
+    { id: 1, name: 'ci', scope: 'read', expires_at: '', created_at: '2026-11-22T10:00:00Z', revoked: false },
+  ];
   fetchMock = mockFetch();
   vi.stubGlobal('fetch', fetchMock);
 });
@@ -90,4 +116,42 @@ test('состояние 2FA с сервера: totp_enabled=true → «2FA вк
   expect(await screen.findByText('2FA включена')).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Подключить 2FA' })).toBeNull();
   expect(screen.getByRole('button', { name: 'Отключить' })).toBeTruthy();
+});
+
+test('токены: строка из /api/tokens — имя, права, бессрочный', async () => {
+  render(Settings);
+
+  const row = (await screen.findByText('ci')).closest('tr');
+  expect(row?.textContent).toContain('Только чтение');
+  expect(row?.textContent).toContain('Никогда');
+});
+
+test('токены: создание отправляет name/scope/expires_in_days и показывает токен', async () => {
+  render(Settings);
+  await screen.findByText('ci');
+
+  await fireEvent.input(screen.getByLabelText('Название'), { target: { value: 'ci' } });
+  await fireEvent.click(screen.getByRole('button', { name: 'Создать' }));
+
+  await waitFor(() => {
+    const call = fetchMock.mock.calls.find(
+      ([u, i]) => String(u) === '/api/tokens' && i?.method === 'POST'
+    );
+    expect(call).toBeTruthy();
+    expect(JSON.parse(String(call![1]!.body))).toEqual({ name: 'ci', scope: 'full', expires_in_days: 30 });
+  });
+  expect(await screen.findByText('fp_testtoken')).toBeTruthy();
+});
+
+test('токены: «Отозвать» удаляет токен по id', async () => {
+  render(Settings);
+  await screen.findByText('ci');
+
+  await fireEvent.click(screen.getByRole('button', { name: 'Отозвать' }));
+
+  await waitFor(() => {
+    const call = fetchMock.mock.calls.find(([u]) => String(u) === '/api/tokens/1');
+    expect(call).toBeTruthy();
+    expect(call![1]!.method).toBe('DELETE');
+  });
 });

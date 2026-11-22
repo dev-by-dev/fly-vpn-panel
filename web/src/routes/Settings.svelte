@@ -28,7 +28,18 @@
   let twofaOk = $state(false);
   let enabled = $state(false);
 
+  // API tokens
+  type Token = { id: number; name: string; scope: string; expires_at: string; created_at: string; revoked: boolean };
+  let tokens = $state<Token[]>([]);
+  let tokenName = $state('');
+  let tokenScope = $state('full');
+  let tokenDays = $state('30');
+  let newToken = $state('');
+  let tokenMsg = $state('');
+  let tokenOk = $state(false);
+
   onMount(async () => {
+    void loadTokens();
     try {
       const res = await apiFetch('/api/settings');
       if (res.ok) {
@@ -147,14 +158,170 @@
       twofaMsg = 'Сеть недоступна';
     }
   }
+
+  async function loadTokens() {
+    try {
+      const res = await apiFetch('/api/tokens');
+      if (res.ok) tokens = ((await res.json()) as { tokens: Token[] }).tokens;
+    } catch {
+      // список не критичен для остальных настроек
+    }
+  }
+
+  async function createToken() {
+    tokenMsg = '';
+    newToken = '';
+    try {
+      const res = await apiFetch('/api/tokens', {
+        method: 'POST',
+        body: JSON.stringify({ name: tokenName, scope: tokenScope, expires_in_days: Number(tokenDays) }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { token?: string; error?: string };
+      if (res.ok && data.token) {
+        tokenOk = true;
+        newToken = data.token;
+        tokenName = '';
+        await loadTokens();
+      } else {
+        tokenOk = false;
+        tokenMsg = data.error === 'invalid_token_request' ? 'Укажите название (до 64 символов)' : `Ошибка (${res.status})`;
+      }
+    } catch {
+      tokenOk = false;
+      tokenMsg = 'Сеть недоступна';
+    }
+  }
+
+  async function revokeToken(id: number) {
+    tokenMsg = '';
+    newToken = '';
+    try {
+      const res = await apiFetch(`/api/tokens/${id}`, { method: 'DELETE' });
+      if (res.ok) await loadTokens();
+      else tokenMsg = `Ошибка (${res.status})`;
+    } catch {
+      tokenMsg = 'Сеть недоступна';
+    }
+  }
+
+  async function copyToken() {
+    try {
+      await navigator.clipboard?.writeText(newToken);
+    } catch {
+      // буфер обмена недоступен (http-origin) — токен можно выделить вручную
+    }
+  }
+
+  function scopeLabel(scope: string) {
+    return scope === 'read' ? 'Только чтение' : 'Полный доступ';
+  }
+
+  function expiryLabel(t: Token) {
+    return t.expires_at ? new Date(t.expires_at).toLocaleDateString('ru-RU') : 'Никогда';
+  }
 </script>
 
 <h1 class="text-2xl font-semibold">Настройки</h1>
 
 <div class="mt-4 grid max-w-2xl grid-cols-1 gap-6">
+  <!-- API tokens -->
+  <section class="rounded-xl border border-sky-500/20 bg-sky-500/5 p-4">
+    <div class="flex items-start gap-3">
+      <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-500/15 text-sky-300">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4" aria-hidden="true">
+          <circle cx="8" cy="15" r="4" /><path d="M10.8 12.2 20 3M16 7l3 3M13 10l3 3" />
+        </svg>
+      </div>
+      <div>
+        <h2 class="text-base font-medium">Токены API</h2>
+        <p class="text-sm text-muted-foreground">Управление токенами доступа к API.</p>
+      </div>
+    </div>
+
+    <table class="mt-4 w-full text-sm">
+      <thead class="text-xs uppercase text-muted-foreground">
+        <tr>
+          <th class="pb-1 text-left font-normal">Название</th>
+          <th class="pb-1 text-left font-normal">Права</th>
+          <th class="pb-1 text-left font-normal">Истекает</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {#each tokens as t (t.id)}
+          <tr class="border-t border-sky-500/10">
+            <td class="py-2">{t.name}</td>
+            <td class="text-muted-foreground">{scopeLabel(t.scope)}</td>
+            <td class="text-muted-foreground">{expiryLabel(t)}</td>
+            <td class="text-right">
+              <button
+                class="text-xs text-muted-foreground hover:text-red-400"
+                onclick={() => revokeToken(t.id)}>Отозвать</button
+              >
+            </td>
+          </tr>
+        {:else}
+          <tr class="border-t border-sky-500/10">
+            <td colspan="4" class="py-2 text-muted-foreground">Токенов пока нет.</td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+
+    <div class="mt-4 grid grid-cols-3 gap-3">
+      <div>
+        <Label for="token-name">Название</Label>
+        <Input id="token-name" bind:value={tokenName} placeholder="ci-monitoring" />
+      </div>
+      <div>
+        <Label for="token-scope">Права</Label>
+        <select
+          id="token-scope"
+          bind:value={tokenScope}
+          class="mt-1 h-9 w-full rounded-md border bg-transparent px-3 text-sm"> <option value="full">Полный доступ</option>
+          <option value="read">Только чтение</option>
+        </select>
+      </div>
+      <div>
+        <Label for="token-days">Срок</Label>
+        <select
+          id="token-days"
+          bind:value={tokenDays}
+          class="mt-1 h-9 w-full rounded-md border bg-transparent px-3 text-sm"> <option value="30">30 дней</option>
+          <option value="90">90 дней</option>
+          <option value="0">Бессрочно</option>
+        </select>
+      </div>
+    </div>
+    <div class="mt-3 flex items-center gap-3">
+      <Button onclick={createToken}>Создать</Button>
+      {#if tokenMsg}
+        <span class="text-sm text-red-400">{tokenMsg}</span>
+      {/if}
+    </div>
+
+    {#if newToken}
+      <div class="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
+        <p class="text-xs text-amber-400">Токен показывается один раз — сохрани сейчас.</p>
+        <code class="mt-1 block break-all font-mono text-sm">{newToken}</code>
+        <Button variant="outline" class="mt-2" onclick={copyToken}>Копировать</Button>
+      </div>
+    {/if}
+  </section>
+
   <!-- Password -->
   <section class="rounded-xl border border-sky-500/20 bg-sky-500/5 p-4">
-    <h2 class="font-medium">Смена пароля</h2>
+    <div class="flex items-start gap-3">
+      <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-500/15 text-sky-300">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4" aria-hidden="true">
+          <rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" />
+        </svg>
+      </div>
+      <div>
+        <h2 class="text-base font-medium">Смена пароля</h2>
+        <p class="text-sm text-muted-foreground">Пароль администратора панели.</p>
+      </div>
+    </div>
     <div class="mt-3 grid grid-cols-2 gap-3">
       <div>
         <Label for="old-pw">Старый пароль</Label>
@@ -175,7 +342,17 @@
 
   <!-- Poll interval -->
   <section class="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-    <h2 class="font-medium">Интервал поллинга</h2>
+    <div class="flex items-start gap-3">
+      <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-300">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+        </svg>
+      </div>
+      <div>
+        <h2 class="text-base font-medium">Интервал поллинга</h2>
+        <p class="text-sm text-muted-foreground">Как часто панель опрашивает xray.</p>
+      </div>
+    </div>
     <div class="mt-3 flex items-end gap-3">
       <div>
         <Label for="poll-interval">Секунды (5–300)</Label>
@@ -190,7 +367,17 @@
 
   <!-- 2FA -->
   <section class="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4">
-    <h2 class="font-medium">Двухфакторная аутентификация</h2>
+    <div class="flex items-start gap-3">
+      <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/15 text-violet-300">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4" aria-hidden="true">
+          <path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z" /><path d="M9 12l2 2 4-4" />
+        </svg>
+      </div>
+      <div>
+        <h2 class="text-base font-medium">Двухфакторная аутентификация</h2>
+        <p class="text-sm text-muted-foreground">Код из приложения при входе.</p>
+      </div>
+    </div>
 
     {#if enroll}
       <div class="mt-3">
