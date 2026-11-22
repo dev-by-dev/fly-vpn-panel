@@ -229,6 +229,39 @@ remove_users() {
   if [ "$removed" -eq 1 ] || $DRY_RUN; then ok; else say skip; fi
 }
 
+# Ports we opened. The SSH port is never here on purpose: removing it can
+# lock the operator out of the machine.
+firewall_ports() { printf '%s\n' 80 443 8443; }
+
+remove_firewall_rules() {
+  step step_firewall
+  if $SKIP_FIREWALL; then say skip; return 0; fi
+  local p did=0
+  if have ufw && ufw status 2>/dev/null | head -1 | grep -qi active; then
+    for p in $(firewall_ports); do
+      run ufw --force delete allow "$p/tcp" >/dev/null 2>&1 || true
+    done
+    did=1
+  fi
+  if have firewall-cmd && systemctl is-active --quiet firewalld; then
+    for p in $(firewall_ports); do
+      run firewall-cmd --permanent --remove-port="$p/tcp" >/dev/null 2>&1 || true
+    done
+    run firewall-cmd --reload >/dev/null 2>&1 || true
+    did=1
+  fi
+  if [ "$did" -eq 1 ]; then ok; else say skip; fi
+}
+
+remove_selinux_ports() {
+  step step_selinux
+  if ! have getenforce || ! have semanage; then say skip; return 0; fi
+  if [ "$(getenforce 2>/dev/null)" != Enforcing ]; then say skip; return 0; fi
+  run semanage port -d -t http_port_t -p tcp 8443 >/dev/null 2>&1 || true
+  run semanage port -d -t http_port_t -p tcp "$ACCESS_PORT" >/dev/null 2>&1 || true
+  ok
+}
+
 main() { :; }
 
 [[ ${UNINSTALL_LIB_ONLY:-0} == 1 ]] || main "$@"

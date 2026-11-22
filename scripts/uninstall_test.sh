@@ -47,5 +47,8 @@ check "dry-run keeps managed block" "[ $rc -eq 0 ] && grep -q flypanel-managed '
 check "dry-run keeps caddyfile" "caddyfile_has_content '$tmp/d/Caddyfile'"
 rm -rf "$tmp"
 
+check "ssh port never removed" "! firewall_ports | grep -qx '22\\|2222'"
+check "web ports listed" "firewall_ports | grep -qx 80 && firewall_ports | grep -qx 443 && firewall_ports | grep -qx 8443"
+
 printf '%s failures\n' "$fails"
 [ "$fails" -eq 0 ]
