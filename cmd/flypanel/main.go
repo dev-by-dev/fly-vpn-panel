@@ -147,7 +147,7 @@ func serveCommand() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: flypanel <version|serve|admin init>")
+	fmt.Fprintln(os.Stderr, "usage: flypanel <version|serve|admin init|admin status>")
 }
 
 // applyInitialXrayConfig writes the xray config generated from the

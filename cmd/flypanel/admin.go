@@ -16,31 +16,93 @@ import (
 	"flypanel/internal/store"
 )
 
-// adminCommand implements `flypanel admin init`: interactive username and
+// adminCommand dispatches `flypanel admin init|status`.
+func adminCommand(args []string) {
+	if len(args) == 0 {
+		adminUsage()
+	}
+	switch args[0] {
+	case "init":
+		adminInit(args[1:])
+	case "status":
+		adminStatusCommand(args[1:])
+	default:
+		adminUsage()
+	}
+}
+
+func adminUsage() {
+	fmt.Fprintln(os.Stderr, "usage: flypanel admin init [--data-dir DIR] [--password-stdin] [username]")
+	fmt.Fprintln(os.Stderr, "       flypanel admin status [--data-dir DIR]")
+	os.Exit(2)
+}
+
+// adminStatusCommand reports whether an admin account exists: exit 0 for
+// "exists", 1 for "none", so the installer can skip the init handoff.
+func adminStatusCommand(args []string) {
+	fs := flag.NewFlagSet("admin status", flag.ExitOnError)
+	dataDir := fs.String("data-dir", "", "data directory (default: DATA_DIR from the env file)")
+	fs.Parse(args)
+
+	dir, err := resolveDataDir(*dataDir)
+	if err != nil {
+		fatalf("admin status: %v", err)
+	}
+	exists, err := adminStatus(dir)
+	if err != nil {
+		fatalf("admin status: %v", err)
+	}
+	if !exists {
+		fmt.Println("no admin")
+		os.Exit(1)
+	}
+	fmt.Println("admin exists")
+}
+
+func adminStatus(dir string) (bool, error) {
+	st, err := store.Open(dir)
+	if err != nil {
+		return false, err
+	}
+	defer st.Close()
+	if _, err := st.AdminGet(); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// resolveDataDir prefers --data-dir, then DATA_DIR from the env file.
+func resolveDataDir(flagValue string) (string, error) {
+	if flagValue != "" {
+		return flagValue, nil
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return "", err
+	}
+	return cfg.DataDir, nil
+}
+
+// adminInit implements `flypanel admin init`: interactive username and
 // password prompts (or --password-stdin for automation) creating the single
 // admin account.
-func adminCommand(args []string) {
-	if len(args) == 0 || args[0] != "init" {
-		fmt.Fprintln(os.Stderr, "usage: flypanel admin init [--data-dir DIR] [--password-stdin] [username]")
-		os.Exit(2)
-	}
+func adminInit(args []string) {
 	fs := flag.NewFlagSet("admin init", flag.ExitOnError)
 	dataDir := fs.String("data-dir", "", "data directory (default: DATA_DIR from the env file)")
 	passwordStdin := fs.Bool("password-stdin", false, "read the password from stdin without confirmation")
-	fs.Parse(args[1:])
+	fs.Parse(args)
 
 	username := ""
 	if fs.NArg() > 0 {
 		username = fs.Arg(0)
 	}
 
-	cfg, err := config.Load()
+	dir, err := resolveDataDir(*dataDir)
 	if err != nil {
 		fatalf("admin init: %v", err)
-	}
-	dir := *dataDir
-	if dir == "" {
-		dir = cfg.DataDir
 	}
 
 	if username == "" {
