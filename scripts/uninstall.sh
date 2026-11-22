@@ -173,13 +173,22 @@ caddyfile_strip() {
   return 0
 }
 
+# caddy_unit_is_ours: our unit points at /usr/local/bin/caddy. An unreadable
+# unit is still ours as far as a dry-run can tell (the real run is root).
+caddy_unit_is_ours() {
+  local unit=/etc/systemd/system/caddy.service
+  [ -f "$unit" ] || return 1
+  grep -q '/usr/local/bin/caddy' "$unit" 2>/dev/null && return 0
+  [ -r "$unit" ] || $DRY_RUN
+}
+
 stop_units() {
   step step_units
   local u unit
   for u in flypanel caddy; do
     unit=/etc/systemd/system/$u.service
     if [ ! -f "$unit" ]; then continue; fi
-    if [ "$u" = caddy ] && ! grep -q '/usr/local/bin/caddy' "$unit"; then
+    if [ "$u" = caddy ] && ! caddy_unit_is_ours; then
       # Foreign caddy: keep it, and keep its binary and user too.
       continue
     fi
@@ -262,6 +271,104 @@ remove_selinux_ports() {
   ok
 }
 
-main() { :; }
+parse_args() {
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --lang) LANG_SEL=${2:-}; shift 2 ;;
+      --yes|-y) ASSUME_YES=true; shift ;;
+      --dry-run) DRY_RUN=true; shift ;;
+      --skip-firewall) SKIP_FIREWALL=true; shift ;;
+      --force) FORCE=true; shift ;;
+      -h|--help) usage; exit 0 ;;
+      *) printf 'unknown argument: %s (see --help)\n' "$1" >&2; exit 2 ;;
+    esac
+  done
+}
+
+usage() {
+  cat <<'EOF'
+usage: uninstall.sh [--lang ru|en|de] [--yes] [--dry-run] [--skip-firewall] [--force]
+EOF
+}
+
+pick_lang() {
+  case ${LANG_SEL:-} in
+    ru|en|de) return 0 ;;
+  esac
+  local guess=ru
+  case ${LANG:-} in
+    de*) guess=de ;;
+    en*) guess=en ;;
+  esac
+  LANG_SEL=$guess
+  if [ -t 0 ] && ! $ASSUME_YES; then
+    printf '%s' "$(t lang_ask)"
+    local answer
+    read -r answer || answer=""
+    case $answer in
+      1) LANG_SEL=ru ;;
+      2) LANG_SEL=en ;;
+      3) LANG_SEL=de ;;
+    esac
+  fi
+}
+
+confirm_removal() {
+  say warn_data
+  if $ASSUME_YES || $DRY_RUN; then return 0; fi
+  if [ ! -t 0 ]; then say aborted; exit 1; fi
+  printf '%s' "$(t ask_delete)"
+  local ans
+  read -r ans || ans=""
+  if ! word_ok "$ans"; then
+    say wrong_word
+    say aborted
+    exit 1
+  fi
+}
+
+installed_something() {
+  [ -e "$PANEL_DIR" ] && return 0
+  [ -e /etc/systemd/system/flypanel.service ] && return 0
+  [ -e /usr/local/bin/caddy ] && return 0
+  return 1
+}
+
+summary() {
+  say done
+  say keep_notes
+}
+
+main() {
+  parse_args "$@"
+  pick_lang
+  # Root before the log is opened: an unprivileged run must not print errors.
+  if [ "$(id -u)" -ne 0 ] && ! $DRY_RUN; then
+    sayf need_root "$0"
+    exit 1
+  fi
+  say welcome
+  if ! installed_something; then
+    say nothing
+    exit 0
+  fi
+  confirm_removal
+  if [ -t 1 ] && ! $DRY_RUN; then
+    exec > >(tee -a "$UNINSTALL_LOG") 2>&1
+  fi
+
+  stop_units
+  remove_caddy_config
+  remove_files
+  remove_users
+  remove_firewall_rules
+  remove_selinux_ports
+
+  step step_logs
+  remove_path /var/log/flypanel-install.log
+  ok
+  summary
+  run rm -f "$UNINSTALL_LOG"
+}
 
 [[ ${UNINSTALL_LIB_ONLY:-0} == 1 ]] || main "$@"
