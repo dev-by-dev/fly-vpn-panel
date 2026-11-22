@@ -450,13 +450,15 @@ panel_admin_exists() {
 }
 
 collect_answers() {
-  while [ -z "$DOMAIN" ]; do
-    DOMAIN=$(ask "$(t q_domain)" "")
-    valid_domain "$DOMAIN" || DOMAIN=""
+  while true; do
+    [ -n "$DOMAIN" ] || DOMAIN=$(ask "$(t q_domain)" "")
+    valid_domain "$DOMAIN" && break
+    # --yes or piped stdin cannot re-ask: die instead of spinning.
+    if $ASSUME_YES || [ ! -t 0 ]; then
+      fatal "invalid domain: $DOMAIN"
+    fi
+    DOMAIN=""
   done
-  if ! valid_domain "$DOMAIN"; then
-    fatal "invalid domain: $DOMAIN"
-  fi
   [ -n "$EMAIL" ] || EMAIL=$(ask "$(t q_email)" "")
   ADMIN_NAME=$(ask "$(t q_admin)" "$ADMIN_NAME")
   [ -n "$ADMIN_NAME" ] || ADMIN_NAME=admin
