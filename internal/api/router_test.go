@@ -217,6 +217,9 @@ func TestSettingsWhitelist(t *testing.T) {
 func TestPasswordChangeRevokesRefresh(t *testing.T) {
 	h, st, _ := newTestRouter(t)
 	createAdmin(t, st, "old-sufficient-password")
+	if _, err := st.APITokenInsert("ci", "full", "hash-x", time.Time{}); err != nil {
+		t.Fatalf("seed api token: %v", err)
+	}
 
 	rr := doReq(t, h, "POST", "/api/auth/login", nil,
 		map[string]string{"username": "admin", "password": "old-sufficient-password"})
@@ -248,6 +251,10 @@ func TestPasswordChangeRevokesRefresh(t *testing.T) {
 	}
 	if ok, _ := bodyJSON(t, rr)["ok"].(bool); !ok {
 		t.Error("change body missing ok:true")
+	}
+
+	if tok, ok, _ := st.APITokenByHash("hash-x"); !ok || !tok.Revoked {
+		t.Error("change did not revoke api tokens")
 	}
 
 	rr = doReq(t, h, "POST", "/api/auth/refresh", ref, nil)

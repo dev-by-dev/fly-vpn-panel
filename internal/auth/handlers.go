@@ -352,6 +352,10 @@ func (h *Handlers) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, "internal")
 		return
 	}
+	if err := h.Store.APITokenRevokeAll(); err != nil {
+		jsonError(w, http.StatusInternalServerError, "internal")
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
