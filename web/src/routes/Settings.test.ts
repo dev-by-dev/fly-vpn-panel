@@ -188,3 +188,13 @@ test('токены: без clipboard API копирование говорит �
 
   expect(await screen.findByText('Не удалось скопировать — выдели вручную')).toBeTruthy();
 });
+
+test('английский язык переводит страницу настроек', async () => {
+  const { setLang } = await import('$lib/i18n.svelte');
+  setLang('en');
+  render(Settings);
+  expect(await screen.findByText('API tokens')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Change password' })).toBeTruthy();
+  expect(screen.queryByText('Токены API')).toBeNull();
+  setLang('ru');
+});

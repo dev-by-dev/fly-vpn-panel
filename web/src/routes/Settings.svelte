@@ -2,6 +2,8 @@
   import { onMount } from 'svelte';
   import { apiFetch, enroll2FA, verify2FA, disable2FA, changePassword } from '$lib/api';
   import { Button } from '$lib/components/ui/button';
+  import { errText } from '$lib/errors';
+  import { t, dateTag } from '$lib/i18n.svelte';
   import { Input } from '$lib/components/ui/input';
   import { Label } from '$lib/components/ui/label';
   import { toDataURL as qrDataUrl } from 'qrcode';
@@ -59,7 +61,7 @@
     const v = Number(interval);
     if (!Number.isInteger(v) || v < 5 || v > 300) {
       intervalOk = false;
-      intervalMsg = 'Значение 5–300 секунд';
+      intervalMsg = t('settings.pollRange');
       return;
     }
     try {
@@ -68,10 +70,10 @@
         body: JSON.stringify({ poll_interval_sec: v }),
       });
       intervalOk = res.ok;
-      intervalMsg = res.ok ? 'Сохранено' : `Ошибка (${res.status})`;
+      intervalMsg = res.ok ? t('settings.saved') : t('dialog.errGeneric', { code: res.status });
     } catch {
       intervalOk = false;
-      intervalMsg = 'Сеть недоступна';
+      intervalMsg = t('common.network');
     }
   }
 
@@ -81,7 +83,7 @@
       const res = await changePassword(oldPw, newPw);
       if (res.ok) {
         pwOk = true;
-        pwMsg = 'Пароль изменён, все сессии отозваны';
+        pwMsg = t('settings.pwSaved');
         oldPw = '';
         newPw = '';
       } else {
@@ -89,14 +91,14 @@
         pwOk = false;
         pwMsg =
           data.error === 'invalid_credentials'
-            ? 'Старый пароль неверен'
+            ? t('settings.errOldPw')
             : data.error === 'password_too_short'
-              ? 'Новый пароль: минимум 12 символов'
-              : `Ошибка (${res.status})`;
+              ? t('settings.errPwShort')
+              : t('dialog.errGeneric', { code: res.status });
       }
     } catch {
       pwOk = false;
-      pwMsg = 'Сеть недоступна';
+      pwMsg = t('common.network');
     }
   }
 
@@ -106,14 +108,14 @@
       const res = await enroll2FA();
       if (!res.ok) {
         twofaOk = false;
-        twofaMsg = `Ошибка (${res.status})`;
+        twofaMsg = t('dialog.errGeneric', { code: res.status });
         return;
       }
       enroll = (await res.json()) as Enroll;
       qrSrc = await qrDataUrl(enroll.otpauth_uri);
     } catch {
       twofaOk = false;
-      twofaMsg = 'Сеть недоступна';
+      twofaMsg = t('common.network');
     }
   }
 
@@ -128,14 +130,14 @@
         qrSrc = '';
         code = '';
         twofaOk = true;
-        twofaMsg = '2FA включена';
+        twofaMsg = t('settings.tfaEnableMsg');
       } else {
         twofaOk = false;
-        twofaMsg = res.status === 401 ? 'Неверный код' : `Ошибка (${res.status})`;
+        twofaMsg = res.status === 401 ? t('settings.errCode') : t('dialog.errGeneric', { code: res.status });
       }
     } catch {
       twofaOk = false;
-      twofaMsg = 'Сеть недоступна';
+      twofaMsg = t('common.network');
     }
   }
 
@@ -148,14 +150,14 @@
         enabled = false;
         disableCode = '';
         twofaOk = true;
-        twofaMsg = '2FA отключена';
+        twofaMsg = t('settings.tfaDisabledMsg');
       } else {
         twofaOk = false;
-        twofaMsg = res.status === 401 ? 'Неверный код' : `Ошибка (${res.status})`;
+        twofaMsg = res.status === 401 ? t('settings.errCode') : t('dialog.errGeneric', { code: res.status });
       }
     } catch {
       twofaOk = false;
-      twofaMsg = 'Сеть недоступна';
+      twofaMsg = t('common.network');
     }
   }
 
@@ -183,10 +185,10 @@
         tokenName = '';
         await loadTokens();
       } else {
-        tokenMsg = data.error === 'invalid_token_request' ? 'Укажите название (до 64 символов)' : `Ошибка (${res.status})`;
+        tokenMsg = errText(data.error ?? '', t('settings.errName'));
       }
     } catch {
-      tokenMsg = 'Сеть недоступна';
+      tokenMsg = t('common.network');
     }
   }
 
@@ -195,35 +197,35 @@
     try {
       const res = await apiFetch(`/api/tokens/${id}`, { method: 'DELETE' });
       if (res.ok) await loadTokens();
-      else tokenMsg = `Ошибка (${res.status})`;
+      else tokenMsg = t('dialog.errGeneric', { code: res.status });
     } catch {
-      tokenMsg = 'Сеть недоступна';
+      tokenMsg = t('common.network');
     }
   }
 
   async function copyToken() {
     copyMsg = '';
     if (!navigator.clipboard) {
-      copyMsg = 'Не удалось скопировать — выдели вручную';
+      copyMsg = t('settings.copyFail');
       return;
     }
     try {
       await navigator.clipboard.writeText(newToken);
     } catch {
-      copyMsg = 'Не удалось скопировать — выдели вручную';
+      copyMsg = t('settings.copyFail');
     }
   }
 
   function scopeLabel(scope: string) {
-    return scope === 'read' ? 'Только чтение' : 'Полный доступ';
+    return scope === 'read' ? t('settings.scopeRead') : t('settings.scopeFull');
   }
 
-  function expiryLabel(t: Token) {
-    return t.expires_at ? new Date(t.expires_at).toLocaleDateString('ru-RU') : 'Никогда';
+  function expiryLabel(tok: Token) {
+    return tok.expires_at ? new Date(tok.expires_at).toLocaleDateString(dateTag()) : t('settings.never');
   }
 </script>
 
-<h1 class="text-2xl font-semibold">Настройки</h1>
+<h1 class="text-2xl font-semibold">{t('settings.title')}</h1>
 
 <div class="mt-4 grid max-w-5xl grid-cols-1 gap-6">
   <!-- Токены и пароль рядом: обе карточки узкие, на широком экране делят строку -->
@@ -237,41 +239,41 @@
         </svg>
       </div>
       <div>
-        <h2 class="text-base font-medium">Токены API</h2>
-        <p class="text-sm text-muted-foreground">Управление токенами доступа к API.</p>
+        <h2 class="text-base font-medium">{t('settings.tokensTitle')}</h2>
+        <p class="text-sm text-muted-foreground">{t('settings.tokensSub')}</p>
       </div>
     </div>
 
     <table class="mt-4 w-full text-sm">
       <thead class="text-xs uppercase text-muted-foreground">
         <tr>
-          <th class="pb-1 text-left font-normal">Название</th>
-          <th class="pb-1 text-left font-normal">Права</th>
-          <th class="pb-1 text-left font-normal">Истекает</th>
+          <th class="pb-1 text-left font-normal">{t('settings.colName')}</th>
+          <th class="pb-1 text-left font-normal">{t('settings.colScope')}</th>
+          <th class="pb-1 text-left font-normal">{t('settings.colExpiry')}</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
-        {#each tokens as t (t.id)}
-          <tr class="border-t border-sky-500/10" class:text-muted-foreground={t.revoked}>
-            <td class="py-2">{t.name}</td>
-            <td class="text-muted-foreground">{scopeLabel(t.scope)}</td>
-            <td class="text-muted-foreground">{expiryLabel(t)}</td>
+        {#each tokens as tok (tok.id)}
+          <tr class="border-t border-sky-500/10" class:text-muted-foreground={tok.revoked}>
+            <td class="py-2">{tok.name}</td>
+            <td class="text-muted-foreground">{scopeLabel(tok.scope)}</td>
+            <td class="text-muted-foreground">{expiryLabel(tok)}</td>
             <td class="text-right">
-              {#if t.revoked}
-                <span class="text-xs text-muted-foreground">Отозван</span>
+              {#if tok.revoked}
+                <span class="text-xs text-muted-foreground">{t('settings.revoked')}</span>
               {:else}
                 <button
                   class="text-xs text-muted-foreground hover:text-red-400"
-                  aria-label="Отозвать {t.name}"
-                  onclick={() => revokeToken(t.id)}>Отозвать</button
+                  aria-label={t('settings.revokeOf', { name: tok.name })}
+                  onclick={() => revokeToken(tok.id)}>{t('settings.revoke')}</button
                 >
               {/if}
             </td>
           </tr>
         {:else}
           <tr class="border-t border-sky-500/10">
-            <td colspan="4" class="py-2 text-muted-foreground">Токенов пока нет.</td>
+            <td colspan="4" class="py-2 text-muted-foreground">{t('settings.empty')}</td>
           </tr>
         {/each}
       </tbody>
@@ -279,31 +281,31 @@
 
     <div class="mt-4 grid grid-cols-3 gap-3">
       <div>
-        <Label for="token-name">Название</Label>
+        <Label for="token-name">{t('settings.name')}</Label>
         <Input id="token-name" bind:value={tokenName} placeholder="ci-monitoring" />
       </div>
       <div>
-        <Label for="token-scope">Права</Label>
+        <Label for="token-scope">{t('settings.scope')}</Label>
         <select
           id="token-scope"
           bind:value={tokenScope}
-          class="mt-1 h-9 w-full rounded-md border bg-transparent px-3 text-sm"> <option value="full">Полный доступ</option>
-          <option value="read">Только чтение</option>
+          class="mt-1 h-9 w-full rounded-md border bg-transparent px-3 text-sm"> <option value="full">{t('settings.scopeFull')}</option>
+          <option value="read">{t('settings.scopeRead')}</option>
         </select>
       </div>
       <div>
-        <Label for="token-days">Срок</Label>
+        <Label for="token-days">{t('settings.term')}</Label>
         <select
           id="token-days"
           bind:value={tokenDays}
-          class="mt-1 h-9 w-full rounded-md border bg-transparent px-3 text-sm"> <option value="30">30 дней</option>
-          <option value="90">90 дней</option>
-          <option value="0">Бессрочно</option>
+          class="mt-1 h-9 w-full rounded-md border bg-transparent px-3 text-sm"> <option value="30">{t('settings.days30')}</option>
+          <option value="90">{t('settings.days90')}</option>
+          <option value="0">{t('settings.forever')}</option>
         </select>
       </div>
     </div>
     <div class="mt-3 flex items-center gap-3">
-      <Button onclick={createToken}>Создать</Button>
+      <Button onclick={createToken}>{t('settings.create')}</Button>
       {#if tokenMsg}
         <span class="text-sm text-red-400">{tokenMsg}</span>
       {/if}
@@ -311,9 +313,9 @@
 
     {#if newToken}
       <div class="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
-        <p class="text-xs text-amber-400">Токен показывается один раз — сохрани сейчас.</p>
+        <p class="text-xs text-amber-400">{t('settings.oneTime')}</p>
         <code class="mt-1 block break-all font-mono text-sm">{newToken}</code>
-        <Button variant="outline" class="mt-2" onclick={copyToken}>Копировать</Button>
+        <Button variant="outline" class="mt-2" onclick={copyToken}>{t('common.copy')}</Button>
         {#if copyMsg}
           <p class="mt-1 text-xs text-amber-400">{copyMsg}</p>
         {/if}
@@ -330,22 +332,22 @@
         </svg>
       </div>
       <div>
-        <h2 class="text-base font-medium">Смена пароля</h2>
-        <p class="text-sm text-muted-foreground">Пароль администратора панели.</p>
+        <h2 class="text-base font-medium">{t('settings.pwTitle')}</h2>
+        <p class="text-sm text-muted-foreground">{t('settings.pwSub')}</p>
       </div>
     </div>
     <div class="mt-3 grid grid-cols-2 gap-3">
       <div>
-        <Label for="old-pw">Старый пароль</Label>
+        <Label for="old-pw">{t('settings.oldPw')}</Label>
         <Input id="old-pw" type="password" bind:value={oldPw} autocomplete="current-password" />
       </div>
       <div>
-        <Label for="new-pw">Новый пароль (12+ символов)</Label>
+        <Label for="new-pw">{t('settings.newPw')}</Label>
         <Input id="new-pw" type="password" bind:value={newPw} autocomplete="new-password" />
       </div>
     </div>
     <div class="mt-3 flex items-center gap-3">
-      <Button onclick={savePassword}>Сменить пароль</Button>
+      <Button onclick={savePassword}>{t('settings.pwSave')}</Button>
       {#if pwMsg}
         <span class="text-sm {pwOk ? 'text-emerald-400' : 'text-red-400'}">{pwMsg}</span>
       {/if}
@@ -362,16 +364,16 @@
         </svg>
       </div>
       <div>
-        <h2 class="text-base font-medium">Интервал поллинга</h2>
-        <p class="text-sm text-muted-foreground">Как часто панель опрашивает xray.</p>
+        <h2 class="text-base font-medium">{t('settings.pollTitle')}</h2>
+        <p class="text-sm text-muted-foreground">{t('settings.pollSub')}</p>
       </div>
     </div>
     <div class="mt-3 flex items-end gap-3">
       <div>
-        <Label for="poll-interval">Секунды (5–300)</Label>
+        <Label for="poll-interval">{t('settings.pollLabel')}</Label>
         <Input id="poll-interval" type="number" min="5" max="300" bind:value={interval} class="w-28" />
       </div>
-      <Button variant="outline" onclick={saveInterval}>Сохранить</Button>
+      <Button variant="outline" onclick={saveInterval}>{t('common.save')}</Button>
       {#if intervalMsg}
         <span class="text-sm {intervalOk ? 'text-emerald-400' : 'text-red-400'}">{intervalMsg}</span>
       {/if}
@@ -387,22 +389,22 @@
         </svg>
       </div>
       <div>
-        <h2 class="text-base font-medium">Двухфакторная аутентификация</h2>
-        <p class="text-sm text-muted-foreground">Код из приложения при входе.</p>
+        <h2 class="text-base font-medium">{t('settings.tfaTitle')}</h2>
+        <p class="text-sm text-muted-foreground">{t('settings.tfaSub')}</p>
       </div>
     </div>
 
     {#if enroll}
       <div class="mt-3">
-        <p class="text-sm text-amber-400">Сохрани сейчас — бэкап-коды показываются только один раз.</p>
+        <p class="text-sm text-amber-400">{t('settings.tfaBackupWarn')}</p>
         <div class="mt-3 flex flex-wrap items-start gap-4">
           {#if qrSrc}
-            <img src={qrSrc} alt="QR код 2FA" class="h-40 w-40 rounded-lg border" />
+            <img src={qrSrc} alt={t('settings.qrAlt')} class="h-40 w-40 rounded-lg border" />
           {/if}
           <div>
-            <div class="text-xs text-muted-foreground">Секрет (ввод вручную):</div>
+            <div class="text-xs text-muted-foreground">{t('settings.tfaSecret')}</div>
             <code class="block break-all rounded bg-muted px-2 py-1 font-mono text-sm">{enroll.secret}</code>
-            <div class="mt-3 text-xs text-muted-foreground">Бэкап-коды (10):</div>
+            <div class="mt-3 text-xs text-muted-foreground">{t('settings.tfaBackup')}</div>
             <div class="mt-1 grid grid-cols-2 gap-x-4 font-mono text-sm">
               {#each enroll.backup_codes as c (c)}
                 <span>{c}</span>
@@ -412,24 +414,24 @@
         </div>
         <div class="mt-4 flex items-end gap-3">
           <div>
-            <Label for="totp-code">Код из приложения</Label>
+            <Label for="totp-code">{t('settings.tfaCode')}</Label>
             <Input id="totp-code" placeholder="123456" bind:value={code} class="w-32" />
           </div>
-          <Button onclick={confirmEnroll}>Подтвердить</Button>
+          <Button onclick={confirmEnroll}>{t('settings.tfaConfirm')}</Button>
         </div>
       </div>
     {:else if enabled}
-      <p class="mt-2 text-sm text-emerald-400">2FA включена</p>
+      <p class="mt-2 text-sm text-emerald-400">{t('settings.tfaOn')}</p>
       <div class="mt-3 flex items-end gap-3">
         <div>
-          <Label for="disable-code">Код для отключения</Label>
+          <Label for="disable-code">{t('settings.tfaDisableCode')}</Label>
           <Input id="disable-code" placeholder="123456" bind:value={disableCode} class="w-32" />
         </div>
-        <Button variant="destructive" onclick={turnOff}>Отключить</Button>
+        <Button variant="destructive" onclick={turnOff}>{t('settings.tfaDisable')}</Button>
       </div>
     {:else}
-      <p class="mt-2 text-sm text-muted-foreground">2FA не включена.</p>
-      <Button class="mt-3" onclick={startEnroll}>Подключить 2FA</Button>
+      <p class="mt-2 text-sm text-muted-foreground">{t('settings.tfaOff')}</p>
+      <Button class="mt-3" onclick={startEnroll}>{t('settings.tfaEnroll')}</Button>
     {/if}
 
     {#if twofaMsg && !enroll && !enabled}
