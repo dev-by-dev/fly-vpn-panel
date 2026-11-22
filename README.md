@@ -13,7 +13,7 @@ sudo bash install.sh
 
 The script asks for the language (ru/en/de), the domain, an optional ACME e-mail and whether to open the firewall. It then installs the panel, xray, Caddy with a Let's Encrypt certificate and a systemd unit. Every step checks the current state, so running the same command again upgrades without touching data.
 
-Non-interactive: `sudo bash install.sh --yes --domain panel.example.org`. Other flags: `--lang en`, `--dry-run`, `--skip-dns`, `--skip-firewall`, `--force`.
+Non-interactive: `sudo bash install.sh --yes --domain panel.example.org`. Other flags: `--lang en`, `--dry-run`, `--skip-dns`, `--skip-firewall`, `--no-update`, `--force`.
 
 Manual install on other distributions: [docs/deploy-checklist.md](docs/deploy-checklist.md).
 
