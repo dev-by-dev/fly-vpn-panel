@@ -49,6 +49,30 @@ rm -rf "$tmp"
 
 check "ssh port never removed" "! firewall_ports | grep -qx '22\\|2222'"
 check "web ports listed" "firewall_ports | grep -qx 80 && firewall_ports | grep -qx 443 && firewall_ports | grep -qx 8443"
+# sshd on a web port: that rule must survive too
+SSHD_T_CMD='echo port 443'
+check "detected ssh port is filtered out" "! firewall_ports | grep -qx 443 && firewall_ports | grep -qx 80 && firewall_ports | grep -qx 8443"
+SSHD_T_CMD='sshd -T'
+
+# 6: begin marker without end -> foreign config after it must survive
+mkdir -p "$tmp/f"; printf '{\n\tmetrics\n}\n\n# flypanel-managed begin\npanel.example.org {\n\tlog\n}\nexample.org {\n\trespond hi\n}\n' > "$tmp/f/Caddyfile"
+caddyfile_strip "$tmp/f/Caddyfile" >/dev/null 2>&1; rc=$?
+check "unclosed marker -> untouched (rc 2)" "[ $rc -eq 2 ] && [ -f '$tmp/f/Caddyfile' ] && grep -q 'example.org' '$tmp/f/Caddyfile'"
+
+# quiet commands stay visible as [dry-run] lines
+DRY_RUN=true
+out=$(quiet false 2>&1); rc=$?
+DRY_RUN=false
+check "dry-run shows quiet commands" "[ $rc -eq 0 ] && printf '%s' \"\$out\" | grep -q 'dry-run'"
+check "quiet runs for real" "quiet true"
+
+# firewall steps belong to the panel, not to a stray caddy
+PANEL_DIR=$tmp/none PANEL_UNIT=$tmp/none.service
+check "no panel -> not installed" "! panel_installed"
+mkdir -p "$tmp/g"; : > "$tmp/g/unit.service"
+PANEL_DIR=$tmp/none PANEL_UNIT=$tmp/g/unit.service
+check "panel unit counts as installed" "panel_installed"
+PANEL_DIR=/opt/flypanel PANEL_UNIT=/etc/systemd/system/flypanel.service
 
 # 5: our file and our backups -> directory is gone
 mkdir -p "$tmp/e"; printf '{\n\tmetrics\n}\n# flypanel-managed begin\np.example.org {\n\tlog\n}\n# flypanel-managed end\n' > "$tmp/e/Caddyfile"

@@ -5,6 +5,7 @@ set -euo pipefail
 
 UNINSTALL_LOG=${UNINSTALL_LOG:-/var/log/flypanel-uninstall.log}
 OS_RELEASE_FILE=${OS_RELEASE_FILE:-/etc/os-release}
+SSHD_T_CMD=${SSHD_T_CMD:-sshd -T}
 PANEL_DIR=/opt/flypanel
 CADDY_DIR=${CADDY_DIR:-/etc/caddy}
 ACCESS_PORT=3002
@@ -127,6 +128,16 @@ run() {
 
 word_ok() { [ "${1:-}" = delete ]; }
 
+# quiet: run without output. The --dry-run line still shows, otherwise the
+# firewall and SELinux steps report "done" with nothing to see.
+quiet() {
+  if $DRY_RUN; then
+    printf '   %s %s\n' "$(t dry)" "$*"
+    return 0
+  fi
+  "$@" >/dev/null 2>&1 || true
+}
+
 remove_path() { [ -e "$1" ] || return 0; run rm -rf "$1"; }
 
 # caddyfile_has_content: true when something other than a leading global
@@ -148,7 +159,10 @@ caddyfile_has_content() {
 caddyfile_strip() {
   local path=$1
   [ -f "$path" ] || return 2
-  grep -q '^# flypanel-managed begin[[:space:]]*$' "$path" || return 2
+  # Both markers exactly once: a begin without end would swallow the rest of
+  # the file, foreign sites included.
+  [ "$(grep -c '^# flypanel-managed begin[[:space:]]*$' "$path")" -eq 1 ] || return 2
+  [ "$(grep -c '^# flypanel-managed end[[:space:]]*$' "$path")" -eq 1 ] || return 2
   local tmp
   tmp=$(mktemp)
   awk '
@@ -245,9 +259,24 @@ remove_users() {
   if [ "$removed" -eq 1 ] || $DRY_RUN; then ok; else say skip; fi
 }
 
+# detect_ssh_port: the port sshd listens on; empty when unknown.
+detect_ssh_port() {
+  local port=""
+  port=$($SSHD_T_CMD 2>/dev/null | awk '$1 == "port" { print $2; exit }')
+  [ -n "$port" ] || port=$(ss -ltnH 2>/dev/null | awk '$4 ~ /:22$/ { print 22; exit }')
+  printf '%s' "$port"
+}
+
 # Ports we opened. The SSH port is never here on purpose: removing it can
 # lock the operator out of the machine.
-firewall_ports() { printf '%s\n' 80 443 8443; }
+firewall_ports() {
+  local p ssh
+  ssh=$(detect_ssh_port)
+  for p in 80 443 8443; do
+    [ -n "$ssh" ] && [ "$p" = "$ssh" ] && continue
+    printf '%s\n' "$p"
+  done
+}
 
 remove_firewall_rules() {
   step step_firewall
@@ -255,15 +284,15 @@ remove_firewall_rules() {
   local p did=0
   if have ufw && ufw status 2>/dev/null | head -1 | grep -qi active; then
     for p in $(firewall_ports); do
-      run ufw --force delete allow "$p/tcp" >/dev/null 2>&1 || true
+      quiet ufw --force delete allow "$p/tcp"
     done
     did=1
   fi
   if have firewall-cmd && systemctl is-active --quiet firewalld; then
     for p in $(firewall_ports); do
-      run firewall-cmd --permanent --remove-port="$p/tcp" >/dev/null 2>&1 || true
+      quiet firewall-cmd --permanent --remove-port="$p/tcp"
     done
-    run firewall-cmd --reload >/dev/null 2>&1 || true
+    quiet firewall-cmd --reload
     did=1
   fi
   if [ "$did" -eq 1 ]; then ok; else say skip; fi
@@ -273,8 +302,8 @@ remove_selinux_ports() {
   step step_selinux
   if ! have getenforce || ! have semanage; then say skip; return 0; fi
   if [ "$(getenforce 2>/dev/null)" != Enforcing ]; then say skip; return 0; fi
-  run semanage port -d -t http_port_t -p tcp 8443 >/dev/null 2>&1 || true
-  run semanage port -d -t http_port_t -p tcp "$ACCESS_PORT" >/dev/null 2>&1 || true
+  quiet semanage port -d -t http_port_t -p tcp 8443
+  quiet semanage port -d -t http_port_t -p tcp "$ACCESS_PORT"
   ok
 }
 
@@ -334,10 +363,15 @@ confirm_removal() {
   fi
 }
 
+PANEL_UNIT=${PANEL_UNIT:-/etc/systemd/system/flypanel.service}
+
+# panel_installed: the firewall and SELinux rules are ours only when the panel
+# is; a hand-installed Caddy elsewhere on the box must not lose its ports.
+panel_installed() { [ -e "$PANEL_DIR" ] || [ -e "$PANEL_UNIT" ]; }
+
 installed_something() {
-  [ -e "$PANEL_DIR" ] && return 0
-  [ -e /etc/systemd/system/flypanel.service ] && return 0
-  [ -e /usr/local/bin/caddy ] && return 0
+  panel_installed && return 0
+  caddy_unit_is_ours && return 0
   return 1
 }
 
@@ -364,12 +398,17 @@ main() {
     exec > >(tee -a "$UNINSTALL_LOG") 2>&1
   fi
 
+  local panel=0
+  if panel_installed; then panel=1; fi
+
   stop_units
   remove_caddy_config
   remove_files
   remove_users
-  remove_firewall_rules
-  remove_selinux_ports
+  if [ "$panel" -eq 1 ] || $DRY_RUN; then
+    remove_firewall_rules
+    remove_selinux_ports
+  fi
 
   step step_logs
   remove_path /var/log/flypanel-install.log
