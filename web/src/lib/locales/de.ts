@@ -303,6 +303,17 @@ const de: Record<keyof typeof ru, string> = {
 	'errors.journal_unavailable': 'systemd-Journal nicht verfügbar',
 	'errors.invalid_source': 'Unbekannte Log-Quelle',
 	'errors.invalid_range': 'Unbekannter Bereich',
+	'monitor.requests': 'Anfragen',
+	'monitor.errorsTotal': 'Fehler',
+	'monitor.inflight': 'In Bearbeitung',
+	'monitor.rss': 'Speicher',
+	'monitor.upstream': 'Upstream',
+	'monitor.chartRequests': 'Anfragen und Fehler pro Sekunde',
+	'monitor.chartTiming': 'Antwortzeit und Speicher',
+	'monitor.rps': 'Anfragen/s',
+	'monitor.errors': 'Fehler/s',
+	'monitor.rssMb': 'Speicher, MB',
+	'monitor.avgMs': 'Ø, ms',
 };
 
 export default de;

@@ -2,11 +2,30 @@
 	import { onMount } from 'svelte';
 	import { apiFetch } from '$lib/api';
 	import { Button } from '$lib/components/ui/button';
-	import { dateTag, t } from '$lib/i18n.svelte';
+	import { dateTag, i18n, t } from '$lib/i18n.svelte';
 	import { errText } from '$lib/errors';
+	import { fmtBytes } from '$lib/traffic';
 
 	type Entry = { time: string; source: string; level: string; message: string };
 	type Source = 'server' | 'xray' | 'caddy';
+	type Range = '1h' | '6h' | '24h' | '7d';
+	type Point = {
+		ts: string;
+		rps: number;
+		errors_per_s: number;
+		avg_ms: number;
+		inflight: number;
+		rss: number;
+		upstream_healthy: boolean | null;
+	};
+	type Summary = {
+		requests?: number;
+		errors?: number;
+		avg_ms?: number;
+		inflight?: number;
+		rss?: number;
+		upstream_healthy?: boolean | null;
+	};
 
 	const sources: Source[] = ['server', 'xray', 'caddy'];
 
@@ -16,6 +35,22 @@
 	let entries: Entry[] = $state([]);
 	let error = $state('');
 	let loading = $state(false);
+
+	const ranges: Range[] = ['1h', '6h', '24h', '7d'];
+	let range: Range = $state('1h');
+	let points: Point[] = $state([]);
+	let summary: Summary = $state({});
+	let caddyErr = $state('');
+
+	// uPlot живёт вне реактивности: данные заливаем императивно.
+	type Chart = { destroy(): void };
+	let UPlotMod: (new (conf: unknown, data: number[][], node: HTMLElement) => Chart) & {
+		paths: { spline(): unknown };
+	} | null = null;
+	let elA = $state<HTMLDivElement | null>(null);
+	let elB = $state<HTMLDivElement | null>(null);
+	let chartA: Chart | null = null;
+	let chartB: Chart | null = null;
 
 	async function loadLogs() {
 		loading = true;
@@ -40,6 +75,109 @@
 		source = s;
 		void loadLogs();
 	}
+
+	async function loadCaddy() {
+		caddyErr = '';
+		try {
+			const res = await apiFetch(`/api/monitoring/caddy?range=${range}`);
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				caddyErr = errText(data.error ?? '', t('monitor.loadFail', { status: res.status }));
+				points = [];
+				return;
+			}
+			points = data.points ?? [];
+			summary = data.summary ?? {};
+		} catch {
+			caddyErr = t('common.network');
+		}
+	}
+
+	function chartOpts(labels: [string, string], fmt: (v: number) => string) {
+		return {
+			width: 0,
+			height: 200,
+			class: 'uplot-dark',
+			series: [
+				{},
+				{
+					label: labels[0],
+					stroke: '#34d399',
+					fill: 'rgba(52,211,153,0.15)',
+					value: (_u: unknown, v: number) => (v == null ? '—' : fmt(v)),
+				},
+				{
+					label: labels[1],
+					stroke: '#60a5fa',
+					fill: 'rgba(96,165,250,0.15)',
+					value: (_u: unknown, v: number) => (v == null ? '—' : fmt(v)),
+				},
+			],
+			scales: { x: { time: true } },
+			axes: [
+				{
+					stroke: '#64748b',
+					grid: { stroke: 'rgba(100,116,139,0.15)' },
+					ticks: { stroke: '#64748b' },
+					values: (_u: unknown, splits: number[]) =>
+						splits.map((s) =>
+							new Date(s * 1000).toLocaleTimeString(dateTag(), {
+								hour: '2-digit',
+								minute: '2-digit',
+								hour12: false,
+							}),
+						),
+				},
+				{
+					stroke: '#64748b',
+					grid: { stroke: 'rgba(100,116,139,0.15)' },
+					ticks: { stroke: '#64748b' },
+					size: 80,
+					values: (_u: unknown, splits: number[]) => splits.map((v) => fmt(v)),
+				},
+			],
+			legend: { live: false },
+		};
+	}
+
+	async function buildCharts() {
+		const a = elA;
+		const b = elB;
+		if (!a || !b || points.length === 0) return;
+		UPlotMod ??= (await import('uplot')).default as unknown as typeof UPlotMod;
+		if (!UPlotMod) return;
+		const x = points.map((p) => Math.floor(new Date(p.ts).getTime() / 1000));
+		const requests = [x, points.map((p) => p.rps), points.map((p) => p.errors_per_s)];
+		const timing = [
+			x,
+			points.map((p) => p.avg_ms),
+			points.map((p) => p.rss / 1024 / 1024),
+		];
+		chartA?.destroy();
+		chartB?.destroy();
+		chartA = new UPlotMod(chartOpts([t('monitor.rps'), t('monitor.errors')], (v) => v.toFixed(2)), requests, a);
+		chartB = new UPlotMod(chartOpts([t('monitor.avgMs'), t('monitor.rssMb')], (v) => v.toFixed(1)), timing, b);
+	}
+
+	// Графики пересобираем при смене вида, диапазона и языка (легенда uPlot статична).
+	$effect(() => {
+		void view;
+		void range;
+		void i18n.lang;
+		const count = points.length;
+		if (view !== 'caddy' || count === 0) return;
+		void buildCharts();
+		return () => {
+			chartA?.destroy();
+			chartB?.destroy();
+			chartA = null;
+			chartB = null;
+		};
+	});
+
+	$effect(() => {
+		if (view === 'caddy') void loadCaddy();
+	});
 
 	// Автообновление: обновляем только видимый список логов, графики ходят по кнопке.
 	$effect(() => {
@@ -124,6 +262,49 @@
 	</section>
 {:else}
 	<section class="mt-4 rounded-xl border border-sky-500/20 bg-sky-500/5 p-4">
-		<p class="text-sm text-muted-foreground">{t('monitor.caddyEmpty')}</p>
+		<div class="flex flex-wrap items-center gap-1">
+			{#each ranges as r (r)}
+				<button
+					type="button"
+					class="rounded px-2 py-1 text-xs {range === r
+						? 'bg-muted font-semibold text-foreground'
+						: 'text-muted-foreground hover:text-foreground'}"
+					onclick={() => (range = r)}>{r}</button
+				>
+			{/each}
+			<Button class="ml-auto" variant="outline" onclick={() => void loadCaddy()}
+				>{t('common.refresh')}</Button
+			>
+		</div>
+
+		{#if caddyErr}
+			<p class="mt-3 text-sm text-red-400">{caddyErr}</p>
+		{:else if points.length === 0}
+			<p class="mt-3 text-sm text-muted-foreground">{t('monitor.caddyEmpty')}</p>
+		{:else}
+			<div class="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+				{#each [
+					[t('monitor.requests'), String(summary.requests ?? 0)],
+					[t('monitor.errorsTotal'), String(summary.errors ?? 0)],
+					[t('monitor.avgMs'), `${summary.avg_ms ?? 0}`],
+					[t('monitor.inflight'), String(summary.inflight ?? 0)],
+					[t('monitor.rss'), fmtBytes(summary.rss ?? 0)],
+					[
+						t('monitor.upstream'),
+						summary.upstream_healthy === true ? 'ok' : summary.upstream_healthy === false ? 'down' : '—',
+					],
+				] as [string, string][] as cards (cards[0])}
+					<div class="rounded-lg border border-sky-500/10 bg-muted/20 p-3">
+						<div class="text-xs text-muted-foreground">{cards[0]}</div>
+						<div class="mt-1 text-lg font-semibold">{cards[1]}</div>
+					</div>
+				{/each}
+			</div>
+
+			<h2 class="mt-6 text-sm font-medium">{t('monitor.chartRequests')}</h2>
+			<div bind:this={elA} class="mt-2"></div>
+			<h2 class="mt-6 text-sm font-medium">{t('monitor.chartTiming')}</h2>
+			<div bind:this={elB} class="mt-2"></div>
+		{/if}
 	</section>
 {/if}
