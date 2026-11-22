@@ -224,6 +224,12 @@ fatal() {
   exit 1
 }
 
+open_install_log() {
+  # summary() prints the admin password; umask alone gives the log 0644.
+  install -m 600 /dev/null "$INSTALL_LOG"
+  exec > >(tee -a "$INSTALL_LOG") 2>&1
+}
+
 have() { command -v "$1" >/dev/null 2>&1; }
 
 pkg_installed() {
@@ -918,7 +924,7 @@ main() {
   fi
   echo "$(t welcome)"
   if ! $DRY_RUN; then
-    exec > >(tee -a "$INSTALL_LOG") 2>&1
+    open_install_log
   fi
   preflight
   collect_answers

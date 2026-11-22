@@ -227,6 +227,11 @@ check "yes-mode invalid domain dies" 1 "$?"
 check "non-tty invalid domain dies" 1 "$?"
 ASSUME_YES=false DOMAIN=""
 
+# --- install log mode ----------------------------------------------------------
+# summary() prints the admin password; umask 022 alone leaves the log 0644.
+( INSTALL_LOG="$WORK/open-log.log" open_install_log ) >/dev/null 2>&1
+check "install log created 600" 600 "$(stat -c %a "$WORK/open-log.log" 2>/dev/null || echo missing)"
+
 # --- https pending ----------------------------------------------------------
 LOCAL=200
 PUB=000
