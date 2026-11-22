@@ -138,6 +138,7 @@ func NewRouter(d Deps) http.Handler {
 
 	p.HandleFunc("GET /api/monitoring/logs", apiH.MonitoringLogs)
 	p.HandleFunc("GET /api/monitoring/caddy", apiH.MonitoringCaddy)
+	p.HandleFunc("DELETE /api/monitoring/logs", apiH.MonitoringClearLogs)
 
 	p.HandleFunc("GET /api/settings", apiH.SettingsGet)
 	p.HandleFunc("PUT /api/settings", apiH.SettingsPut)

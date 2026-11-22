@@ -32,6 +32,7 @@
 	let view: 'logs' | 'caddy' = $state('logs');
 	let source: Source = $state('server');
 	let auto = $state(false);
+	let paused = $state(false);
 	let entries: Entry[] = $state([]);
 	let error = $state('');
 	let loading = $state(false);
@@ -75,6 +76,21 @@
 	function pickSource(s: Source) {
 		source = s;
 		void loadLogs();
+	}
+
+	// Журнал systemd панели недоступен на запись: чистим экран, файл xray режем сами.
+	async function clearLogs() {
+		entries = [];
+		if (source !== 'xray') return;
+		try {
+			const res = await apiFetch('/api/monitoring/logs?source=xray', { method: 'DELETE' });
+			if (!res.ok) {
+				const data = await res.json().catch(() => ({}));
+				error = errText(data.error ?? '', t('monitor.loadFail', { status: res.status }));
+			}
+		} catch {
+			error = t('common.network');
+		}
 	}
 
 	async function loadCaddy() {
@@ -193,7 +209,7 @@
 
 	// Автообновление: обновляем только видимый список логов, графики ходят по кнопке.
 	$effect(() => {
-		if (!auto || view !== 'logs') return;
+		if (!auto || paused || view !== 'logs') return;
 		const id = setInterval(() => void loadLogs(), 5000);
 		return () => clearInterval(id);
 	});
@@ -254,6 +270,10 @@
 				{t('monitor.auto')}
 			</label>
 			<Button variant="outline" onclick={() => void loadLogs()}>{t('common.refresh')}</Button>
+			<Button variant="outline" onclick={() => (paused = !paused)}
+				>{paused ? t('monitor.resume') : t('monitor.pause')}</Button
+			>
+			<Button variant="outline" onclick={() => void clearLogs()}>{t('monitor.clear')}</Button>
 		</div>
 
 		{#if error}

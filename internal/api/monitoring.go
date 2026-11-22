@@ -58,6 +58,24 @@ func (h *Handlers) MonitoringLogs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
 }
 
+// MonitoringClearLogs clears the xray error log. Journald belongs to the
+// system, so server and caddy sources are refused: the panel only reads them.
+func (h *Handlers) MonitoringClearLogs(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("source") != "xray" {
+		jsonError(w, http.StatusBadRequest, "invalid_source")
+		return
+	}
+	if h.Monitor == nil {
+		jsonError(w, http.StatusBadGateway, "journal_unavailable")
+		return
+	}
+	if err := h.Monitor.ClearXray(); err != nil {
+		jsonError(w, http.StatusInternalServerError, "internal")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 var caddyRanges = map[string]struct {
 	window time.Duration
 	bucket time.Duration

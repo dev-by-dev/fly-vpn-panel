@@ -53,13 +53,16 @@ const summary = {
 };
 
 let urls: string[] = [];
+let calls: { url: string; method: string }[] = [];
 
 function mockFetch(entries: unknown[] = [], caddy: { points: unknown[]; summary: unknown } = { points, summary }) {
   urls = [];
+  calls = [];
   configs.length = 0;
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     urls.push(url);
+    calls.push({ url, method: init?.method ?? 'GET' });
     if (url.includes('/api/monitoring/logs')) {
       return new Response(JSON.stringify({ entries }), { status: 200 });
     }
@@ -128,5 +131,58 @@ describe('monitoring page', () => {
     expect(await screen.findByRole('button', { name: 'Logs' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Caddy' })).toBeTruthy();
     expect(screen.queryByText('Логи')).toBeNull();
+  });
+
+  test('пауза останавливает автообновление', async () => {
+    vi.useFakeTimers();
+    mockFetch([]);
+    render(Monitoring);
+    await vi.advanceTimersByTimeAsync(0);
+
+    await fireEvent.click(screen.getByLabelText('Автообновление (5 с)'));
+    await vi.advanceTimersByTimeAsync(5100);
+    const beforePause = urls.length;
+    expect(beforePause).toBeGreaterThan(1);
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Пауза' }));
+    await vi.advanceTimersByTimeAsync(5100);
+    expect(urls.length).toBe(beforePause);
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Продолжить' }));
+    await vi.advanceTimersByTimeAsync(5100);
+    expect(urls.length).toBeGreaterThan(beforePause);
+
+    vi.useRealTimers();
+  });
+
+  test('очистка в xray обрезает файл и пустеет список', async () => {
+    mockFetch([
+      { time: '2026-11-22T10:00:00Z', source: 'xray', level: 'warning', message: 'boom' },
+    ]);
+    render(Monitoring);
+    await screen.findByText('boom');
+    await fireEvent.click(screen.getByRole('button', { name: 'xray' }));
+    await waitFor(() => expect(calls.some((c) => c.url.includes('source=xray'))).toBe(true));
+    // даём догрузке применить ответ, иначе очистка гоняется с ней
+    await new Promise((r) => setTimeout(r, 0));
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Очистить' }));
+    await waitFor(() =>
+      expect(
+        calls.some((c) => c.method === 'DELETE' && c.url.includes('source=xray')),
+      ).toBe(true),
+    );
+    expect(screen.queryByText('boom')).toBeNull();
+  });
+
+  test('очистка журнала не удаляет записи на сервере', async () => {
+    mockFetch([
+      { time: '2026-11-22T10:00:00Z', source: 'server', level: 'err', message: 'boom' },
+    ]);
+    render(Monitoring);
+    await screen.findByText('boom');
+    await fireEvent.click(screen.getByRole('button', { name: 'Очистить' }));
+    expect(screen.queryByText('boom')).toBeNull();
+    expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
   });
 });

@@ -116,3 +116,28 @@ func TestReadJournalError(t *testing.T) {
 		t.Fatalf("Read(server) error = %v, want wrapped journalctl error", err)
 	}
 }
+
+func TestClearXray(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "xray-error.log")
+	if err := os.WriteFile(path, []byte("old\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := Reader{DataDir: dir}
+	if err := r.ClearXray(); err != nil {
+		t.Fatalf("ClearXray(): %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) != 0 {
+		t.Fatalf("file size after clear = %d, want 0", len(data))
+	}
+}
+
+func TestClearXrayMissingFile(t *testing.T) {
+	if err := (Reader{DataDir: t.TempDir()}).ClearXray(); err != nil {
+		t.Fatalf("ClearXray(missing) = %v, want nil", err)
+	}
+}

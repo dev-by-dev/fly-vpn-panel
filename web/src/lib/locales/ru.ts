@@ -312,4 +312,7 @@ export default {
 	'monitor.errors': 'ошибок/с',
 	'monitor.rssMb': 'память, МБ',
 	'monitor.avgMs': 'Среднее, мс',
+	'monitor.pause': 'Пауза',
+	'monitor.resume': 'Продолжить',
+	'monitor.clear': 'Очистить',
 } as const;

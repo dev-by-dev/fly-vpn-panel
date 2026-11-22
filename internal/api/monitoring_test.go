@@ -3,6 +3,8 @@ package api
 import (
 	"errors"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -141,5 +143,40 @@ func TestMonitoringXrayDefaultsToDataDir(t *testing.T) {
 	rr := doReq(t, h, http.MethodGet, "/api/monitoring/logs?source=xray", accessCookie(t, j), nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (missing xray log is an empty list)", rr.Code)
+	}
+}
+
+
+func TestMonitoringClearLogs(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("store.Open(): %v", err)
+	}
+	t.Cleanup(func() { st.Close() })
+	j := auth.NewJWT([]byte("0123456789abcdef0123456789abcdef"))
+	h := NewRouter(Deps{
+		Store: st, JWT: j, RL: auth.NewRateLimiter(5, time.Minute),
+		Manager: &fakeManager{status: xray.Status{Running: true}},
+		Cfg: &config.Config{DataDir: dir, PollIntervalSec: 30},
+		Poller:  stats.NewPoller(st, nil, nil, 30*time.Second),
+		Monitor: &monitoring.Reader{DataDir: dir},
+	})
+	path := filepath.Join(dir, "xray-error.log")
+	if err := os.WriteFile(path, []byte("old\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	rr := doReq(t, h, http.MethodDelete, "/api/monitoring/logs?source=xray", accessCookie(t, j), nil)
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("DELETE xray status = %d, want 204 (%s)", rr.Code, rr.Body.String())
+	}
+	if data, err := os.ReadFile(path); err != nil || len(data) != 0 {
+		t.Fatalf("xray log after clear = %q, %v; want empty", data, err)
+	}
+
+	rr = doReq(t, h, http.MethodDelete, "/api/monitoring/logs?source=server", accessCookie(t, j), nil)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("DELETE server status = %d, want 400", rr.Code)
 	}
 }

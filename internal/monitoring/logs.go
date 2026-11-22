@@ -170,3 +170,16 @@ func xrayLevel(line string) string {
 	}
 	return "info"
 }
+
+// ClearXray truncates the xray error log. Journald is not ours to clear:
+// the panel reads it with the systemd-journal group only.
+func (r Reader) ClearXray() error {
+	err := os.Truncate(filepath.Join(r.DataDir, "xray-error.log"), 0)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("truncate xray log: %w", err)
+	}
+	return nil
+}

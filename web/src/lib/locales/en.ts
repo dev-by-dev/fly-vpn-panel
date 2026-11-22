@@ -314,6 +314,9 @@ const en: Record<keyof typeof ru, string> = {
 	'monitor.errors': 'errors/s',
 	'monitor.rssMb': 'memory, MB',
 	'monitor.avgMs': 'Avg, ms',
+	'monitor.pause': 'Pause',
+	'monitor.resume': 'Resume',
+	'monitor.clear': 'Clear',
 };
 
 export default en;
