@@ -3,6 +3,8 @@
   import { Input } from '$lib/components/ui/input';
   import { Label } from '$lib/components/ui/label';
   import { apiFetch } from '$lib/api';
+  import { t } from '$lib/i18n.svelte';
+  import { errText } from '$lib/errors';
 
   type InboundRow = { id: number; tag: string; enabled: boolean; config: Record<string, unknown> };
 
@@ -53,20 +55,18 @@
     return JSON.stringify(cfg, null, 2);
   }
 
-  const applyWarn = 'Сохранено в БД, но применить не удалось — xray работает со старым конфигом, повторите позже.';
-
   async function submit(e: SubmitEvent) {
     e.preventDefault();
     error = '';
     if (tag.trim() === '') {
-      error = 'Укажите tag';
+      error = t('form.errTag');
       return;
     }
     let cfg: Record<string, unknown>;
     try {
       cfg = rawDirty ? (JSON.parse(raw) as Record<string, unknown>) : build();
     } catch {
-      error = 'Невалидный JSON';
+      error = t('form.errJson');
       return;
     }
     saving = true;
@@ -76,24 +76,24 @@
         body: JSON.stringify(isEdit ? { tag: tag.trim(), config: cfg } : { tag: tag.trim(), enabled: true, config: cfg }),
       });
       if (res.status === 502) {
-        alert(applyWarn);
+        alert(t('inbounds.applyWarn'));
         onsaved();
         return;
       }
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
-        error = `Ошибка: ${data.error ?? res.status}`;
+        error = errText(data.error ?? '', t('dialog.errGeneric', { code: data.error ?? res.status }));
         return;
       }
       if (!isEdit) {
         // у нового inbound пустые Reality-ключи: генерируем сразу, иначе xray не применит конфиг
         const created = (await res.json()) as { id: number };
         const keys = await apiFetch(`/api/inbounds/${created.id}/keys`, { method: 'POST' });
-        if (keys.status === 502) alert(applyWarn);
+        if (keys.status === 502) alert(t('inbounds.applyWarn'));
       }
       onsaved();
     } catch {
-      error = 'Сеть недоступна';
+      error = t('common.network');
     } finally {
       saving = false;
     }
@@ -102,15 +102,15 @@
 
 <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true">
   <div class="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border bg-card p-5 shadow-lg">
-    <h2 class="text-lg font-semibold">{isEdit ? 'Изменить inbound' : 'Новый inbound'}</h2>
-    <p class="mt-1 text-xs text-yellow-400">Применение = рестарт xray ~1–2 с</p>
+    <h2 class="text-lg font-semibold">{isEdit ? t('form.editTitle') : t('form.newTitle')}</h2>
+    <p class="mt-1 text-xs text-yellow-400">{t('form.restartNote')}</p>
     <form class="mt-4 grid gap-4" onsubmit={submit}>
       <div class="grid gap-1.5">
         <Label for="i-tag">Tag</Label>
         <Input id="i-tag" bind:value={tag} placeholder="in-443" />
       </div>
       <div class="grid gap-1.5">
-        <Label for="i-port">Порт</Label>
+        <Label for="i-port">{t('form.port')}</Label>
         <Input id="i-port" type="number" min="1" max="65535" bind:value={port} />
       </div>
       <div class="grid gap-1.5">
@@ -118,7 +118,7 @@
         <Input id="i-path" bind:value={path} placeholder="/xhttp" />
       </div>
       <div class="grid gap-1.5">
-        <Label for="i-mode">Режим xhttp</Label>
+        <Label for="i-mode">{t('form.mode')}</Label>
         <select
           id="i-mode"
           bind:value={mode}
@@ -131,19 +131,19 @@
         </select>
       </div>
       <div class="grid gap-1.5">
-        <Label for="i-dest">Reality dest</Label>
+        <Label for="i-dest">{t('form.dest')}</Label>
         <Input id="i-dest" bind:value={dest} placeholder="www.microsoft.com:443" />
       </div>
       <div class="grid gap-1.5">
-        <Label for="i-sni">serverNames (через запятую)</Label>
+        <Label for="i-sni">{t('form.sni')}</Label>
         <Input id="i-sni" bind:value={serverNames} placeholder="www.microsoft.com" />
       </div>
       <div class="grid gap-1.5">
-        <Label for="i-sids">shortIds (через запятую)</Label>
+        <Label for="i-sids">{t('form.sids')}</Label>
         <Input id="i-sids" bind:value={shortIds} placeholder="" />
       </div>
       <div class="grid gap-1.5">
-        <Label for="i-fp">Fingerprint</Label>
+        <Label for="i-fp">{t('form.fp')}</Label>
         <select
           id="i-fp"
           bind:value={fp}
@@ -155,7 +155,7 @@
         </select>
       </div>
       <div class="grid gap-1.5">
-        <Label for="i-raw">Конфиг inbound (JSON)</Label>
+        <Label for="i-raw">{t('form.raw')}</Label>
         <textarea
           id="i-raw"
           rows="10"
@@ -171,8 +171,8 @@
         <p class="text-sm text-red-400">{error}</p>
       {/if}
       <div class="mt-1 flex justify-end gap-2">
-        <Button type="button" variant="outline" onclick={onclose}>Отмена</Button>
-        <Button type="submit" disabled={saving}>{saving ? 'Применение…' : 'Сохранить'}</Button>
+        <Button type="button" variant="outline" onclick={onclose}>{t('form.cancel')}</Button>
+        <Button type="submit" disabled={saving}>{saving ? t('form.saving') : t('form.save')}</Button>
       </div>
     </form>
   </div>

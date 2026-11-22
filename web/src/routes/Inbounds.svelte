@@ -4,6 +4,8 @@
   import { Button } from '$lib/components/ui/button';
   import InboundForm from '$lib/components/InboundForm.svelte';
   import { inboundsIntent } from '$lib/inboundsIntent.svelte';
+  import { t } from '$lib/i18n.svelte';
+  import { fmtBytes } from '$lib/traffic';
 
   type InboundRow = { id: number; tag: string; enabled: boolean; config: Record<string, any> };
 
@@ -14,8 +16,6 @@
   let showMetrics = $state(false);
   let metrics = $state<{ inbounds: { Tag: string; Up: number; Down: number }[]; online_count: number } | null>(null);
   let metricsErr = $state('');
-
-  const applyWarn = 'Сохранено в БД, но применить не удалось — xray работает со старым конфигом, повторите позже.';
 
   function cfgPort(inb: InboundRow): string {
     return String(inb.config.port ?? '?');
@@ -29,36 +29,29 @@
     try {
       const res = await apiFetch('/api/inbounds');
       if (!res.ok) {
-        error = `Не удалось загрузить (${res.status})`;
+        error = t('inbounds.loadFail', { status: res.status });
         return;
       }
       inbounds = (await res.json()) as InboundRow[];
       error = '';
     } catch {
-      error = 'Сеть недоступна';
+      error = t('common.network');
     }
   }
 
   onMount(load);
 
-  function fmtBytes(n: number): string {
-    if (n <= 0) return '0 Б';
-    const units = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
-    const i = Math.min(units.length - 1, Math.floor(Math.log(n) / Math.log(1024)));
-    return `${(n / 1024 ** i).toFixed(1).replace(/\.0$/, '')} ${units[i]}`;
-  }
-
   async function loadMetrics() {
     try {
       const res = await apiFetch('/api/inbounds/metrics');
       if (!res.ok) {
-        metricsErr = `Не удалось получить метрики (${res.status})`;
+        metricsErr = t('inbounds.metricsLoadFail', { status: res.status });
         return;
       }
       metrics = (await res.json()) as typeof metrics;
       metricsErr = '';
     } catch {
-      metricsErr = 'Сеть недоступна';
+      metricsErr = t('common.network');
     }
   }
 
@@ -85,26 +78,26 @@
       method: 'PATCH',
       body: JSON.stringify({ enabled }),
     });
-    if (res.status === 502) alert(applyWarn);
+    if (res.status === 502) alert(t('inbounds.applyWarn'));
     await load();
   }
 
   async function regenKeys(inb: InboundRow) {
-    if (!confirm(`Перегенерировать Reality-ключи для ${inb.tag}? Клиентам нужен новый publicKey.`)) return;
+    if (!confirm(t('inbounds.confirmRegen', { tag: inb.tag }))) return;
     const res = await apiFetch(`/api/inbounds/${inb.id}/keys`, { method: 'POST' });
     if (res.status === 502) {
-      alert(applyWarn);
+      alert(t('inbounds.applyWarn'));
     } else if (res.ok) {
       const data = (await res.json()) as { public_key: string };
-      alert(`Новый publicKey: ${data.public_key}`);
+      alert(t('inbounds.newKey', { key: data.public_key }));
     }
     await load();
   }
 
   async function remove(inb: InboundRow) {
-    if (!confirm(`Удалить ${inb.tag}?`)) return;
+    if (!confirm(t('inbounds.confirmDelete', { tag: inb.tag }))) return;
     const res = await apiFetch(`/api/inbounds/${inb.id}`, { method: 'DELETE' });
-    if (res.status === 502) alert(applyWarn);
+    if (res.status === 502) alert(t('inbounds.applyWarn'));
     await load();
   }
 </script>
@@ -123,8 +116,8 @@
         <h2 class="font-medium">Inbound Traffic</h2>
       </div>
       <div class="flex gap-1">
-        <Button size="xs" variant="outline" onclick={loadMetrics}>Обновить</Button>
-        <Button size="xs" variant="ghost" onclick={() => (showMetrics = false)}>Скрыть</Button>
+        <Button size="xs" variant="outline" onclick={loadMetrics}>{t('inbounds.refresh')}</Button>
+        <Button size="xs" variant="ghost" onclick={() => (showMetrics = false)}>{t('inbounds.hide')}</Button>
       </div>
     </div>
 
@@ -135,7 +128,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="size-3.5"><path d="m12 2 9 5-9 5-9-5 9-5Z" /><path d="m3 12 9 5 9-5" /></svg>
           </span>
           <div>
-            <div class="text-xs text-muted-foreground">Инбаунды</div>
+            <div class="text-xs text-muted-foreground">{t('inbounds.statInbounds')}</div>
             <div class="text-lg font-semibold leading-none">{metrics.inbounds.length}</div>
           </div>
         </div>
@@ -144,7 +137,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="size-3.5"><path d="M3 3v18h18" /><path d="m7 14 4-4 3 3 5-6" /></svg>
           </span>
           <div>
-            <div class="text-xs text-muted-foreground">Онлайн</div>
+            <div class="text-xs text-muted-foreground">{t('inbounds.statOnline')}</div>
             <div class="text-lg font-semibold leading-none">{metrics.online_count}</div>
           </div>
         </div>
@@ -153,7 +146,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="size-3.5"><path d="M7 17 17 7M17 7H9m8 0v8" /></svg>
           </span>
           <div>
-            <div class="text-xs text-muted-foreground">Трафик</div>
+            <div class="text-xs text-muted-foreground">{t('inbounds.statTraffic')}</div>
             <div class="text-lg font-semibold leading-none">
               {fmtBytes(metrics.inbounds.reduce((a, m) => a + m.Up + m.Down, 0))}
             </div>
@@ -184,11 +177,11 @@
             </div>
           </div>
         {:else}
-          <p class="text-sm text-muted-foreground">Счётчиков пока нет</p>
+          <p class="text-sm text-muted-foreground">{t('inbounds.noCounters')}</p>
         {/each}
       </div>
     {:else}
-      <p class="mt-2 text-sm text-muted-foreground">Загрузка…</p>
+      <p class="mt-2 text-sm text-muted-foreground">{t('inbounds.loading')}</p>
     {/if}
     {#if metricsErr}
       <p class="mt-2 text-sm text-red-400">{metricsErr}</p>
@@ -197,7 +190,7 @@
 {/if}
 
 {#if !showMetrics}
-<p class="mt-2 text-sm text-yellow-400">Внимание: применение изменений = рестарт xray ~1–2 с</p>
+<p class="mt-2 text-sm text-yellow-400">{t('inbounds.warn')}</p>
 
 {#if error}
   <p class="mt-2 text-sm text-red-400">{error}</p>
@@ -208,10 +201,10 @@
     <thead class="bg-muted/50 text-left text-muted-foreground">
       <tr>
         <th class="px-3 py-2 font-medium">Tag</th>
-        <th class="px-3 py-2 font-medium">Порт</th>
+        <th class="px-3 py-2 font-medium">{t('inbounds.colPort')}</th>
         <th class="px-3 py-2 font-medium">Path</th>
-        <th class="px-3 py-2 font-medium">Включён</th>
-        <th class="px-3 py-2 font-medium">Действия</th>
+        <th class="px-3 py-2 font-medium">{t('inbounds.colEnabled')}</th>
+        <th class="px-3 py-2 font-medium">{t('inbounds.colActions')}</th>
       </tr>
     </thead>
     <tbody>
@@ -230,9 +223,9 @@
           </td>
           <td class="px-3 py-2">
             <div class="flex flex-wrap gap-1">
-              <Button size="xs" variant="outline" onclick={() => (editing = inb)}>Изменить</Button>
-              <Button size="xs" variant="outline" onclick={() => regenKeys(inb)}>Ключи</Button>
-              <Button size="xs" variant="destructive" onclick={() => remove(inb)}>Удалить</Button>
+              <Button size="xs" variant="outline" onclick={() => (editing = inb)}>{t('inbounds.btnEdit')}</Button>
+              <Button size="xs" variant="outline" onclick={() => regenKeys(inb)}>{t('inbounds.btnKeys')}</Button>
+              <Button size="xs" variant="destructive" onclick={() => remove(inb)}>{t('inbounds.btnDelete')}</Button>
             </div>
           </td>
         </tr>
