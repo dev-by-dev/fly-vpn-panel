@@ -1,0 +1,68 @@
+import { test, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/svelte';
+import Config from './Config.svelte';
+
+const routing = '{"domainStrategy":"AsIs","rules":[]}';
+
+function json(body: string, status = 200) {
+  return Promise.resolve(new Response(body, { status }));
+}
+
+let putBody = '';
+let routingStatus = 200;
+
+function mockFetch() {
+  vi.stubGlobal('fetch', vi.fn((input: string | URL, init?: RequestInit) => {
+    const url = String(input);
+    const method = init?.method ?? 'GET';
+    if (url === '/api/config') return json('{"inbounds":[]}');
+    if (url === '/api/config/routing' && method === 'GET') {
+      return routingStatus === 200 ? json(routing) : json('{"error":"internal"}', routingStatus);
+    }
+    if (url === '/api/config/routing' && method === 'PUT') {
+      putBody = String(init?.body ?? '');
+      return json('', 200);
+    }
+    return json('{}', 404);
+  }));
+}
+
+beforeEach(() => { putBody = ''; routingStatus = 200; mockFetch(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+
+test('показывает дефолтный routing в textarea', async () => {
+  render(Config);
+  const ta = await screen.findByLabelText('Routing JSON');
+  await waitFor(() => expect((ta as HTMLTextAreaElement).value).toContain('domainStrategy'));
+});
+
+test('Применить отправляет ровно введённый текст', async () => {
+  render(Config);
+  const ta = (await screen.findByLabelText('Routing JSON')) as HTMLTextAreaElement;
+  await waitFor(() => expect(ta.value).toContain('domainStrategy'));
+  ta.value = '{"domainStrategy":"IPIfNonMatch","rules":[]}';
+  await fireEvent.input(ta);
+  await fireEvent.click(screen.getByRole('button', { name: 'Применить' }));
+  await waitFor(() => expect(putBody).toBe('{"domainStrategy":"IPIfNonMatch","rules":[]}'));
+  await screen.findByText('Применено');
+});
+
+test('422 объясняет откат', async () => {
+  vi.stubGlobal('fetch', vi.fn((input: string | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url === '/api/config') return json('{"inbounds":[]}');
+    if (init?.method === 'PUT') return json('{"error":"invalid_json"}', 422);
+    return json(routing);
+  }));
+  render(Config);
+  await screen.findByLabelText('Routing JSON');
+  await fireEvent.click(screen.getByRole('button', { name: 'Применить' }));
+  await screen.findByText('Некорректный JSON (422)');
+});
+
+test('ошибка загрузки routing не скрывает конфиг', async () => {
+  routingStatus = 500;
+  render(Config);
+  await screen.findByText('Не удалось загрузить routing (500)');
+  expect(await screen.findByText(/inbounds/)).toBeTruthy();
+});
