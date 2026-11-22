@@ -28,6 +28,7 @@ FAMILY=""
 SSH_PORT=""
 FIREWALL_FAILED=false
 ADMIN_PASSWORD=""
+ADMIN_CREATED=0
 ADMIN_FAILED=false
 PKG_NEW=""
 
@@ -49,8 +50,6 @@ declare -A MSG_RU=(
   [q_domain]="Домен панели (A-запись уже должна указывать на этот сервер): "
   [q_email]="E-mail для Let's Encrypt (можно пусто): "
   [q_admin]="Логин администратора [admin]: "
-  [q_password]="Пароль администратора панели (мин. 12 символов, ввод не виден): "
-  [pw_short]="Пароль короче 12 символов — попробуй ещё раз."
   [already_running]="Установщик уже запущен в другом терминале. Дождись окончания."
   [q_firewall]="Настроить фаервол (SSH-порт %s, 80, 443, 8443)? [Y/n]: "
   [confirm]="Установить flypanel на %s для домена %s? [Y/n]: "
@@ -71,8 +70,15 @@ declare -A MSG_RU=(
   [skip]="пропущено"
   [dry]="[dry-run]"
   [admin_exists]="Админ уже создан — шаг пропущен."
-  [admin_skip]="Админ не создан (--yes). Создай вручную: sudo -u flypanel env FLYPANEL_ENV=%s/.env %s/bin/flypanel admin init"
   [done]="Готово. Панель: https://%s"
+  [conn_title]="Доступ к панели:"
+  [conn_url]="  URL:    https://%s"
+  [conn_local]="  локально: http://127.0.0.1:3002/"
+  [conn_login]="  Логин:  %s"
+  [conn_password]="  Пароль: %s"
+  [conn_keep]="Пароль не менялся — админ уже был создан раньше."
+  [conn_dry]="Пароль будет сгенерирован при установке."
+  [conn_saved]="Пароль также записан в лог установки. Сменить можно в Настройках."
   [log_path]="Лог установки: %s"
   [ssh_unknown]="Не удалось определить SSH-порт — фаервол НЕ включён. Порты открой вручную или запусти с --skip-firewall."
   [caddy_foreign]="В /etc/caddy/Caddyfile есть чужая конфигурация — не трогаю. Перенеси её или поставь панель на отдельный сервер."
@@ -99,8 +105,6 @@ declare -A MSG_EN=(
   [q_domain]="Panel domain (A record must already point here): "
   [q_email]="E-mail for Let's Encrypt (may be empty): "
   [q_admin]="Admin login [admin]: "
-  [q_password]="Panel admin password (min 12 chars, input hidden): "
-  [pw_short]="Password is shorter than 12 characters — try again."
   [already_running]="The installer is already running in another terminal. Wait for it to finish."
   [q_firewall]="Configure firewall (SSH port %s, 80, 443, 8443)? [Y/n]: "
   [confirm]="Install flypanel on %s for %s? [Y/n]: "
@@ -121,8 +125,15 @@ declare -A MSG_EN=(
   [skip]="skipped"
   [dry]="[dry-run]"
   [admin_exists]="Admin already exists — step skipped."
-  [admin_skip]="Admin not created (--yes). Create it: sudo -u flypanel env FLYPANEL_ENV=%s/.env %s/bin/flypanel admin init"
   [done]="Done. Panel: https://%s"
+  [conn_title]="Panel access:"
+  [conn_url]="  URL:      https://%s"
+  [conn_local]="  local:    http://127.0.0.1:3002/"
+  [conn_login]="  Login:    %s"
+  [conn_password]="  Password: %s"
+  [conn_keep]="Password unchanged — the admin already existed."
+  [conn_dry]="A password will be generated during install."
+  [conn_saved]="The password is also in the install log. Change it in Settings."
   [log_path]="Install log: %s"
   [ssh_unknown]="Could not detect the SSH port — firewall NOT enabled. Open ports manually or use --skip-firewall."
   [caddy_foreign]="Foreign configuration in /etc/caddy/Caddyfile — leaving it alone."
@@ -149,8 +160,6 @@ declare -A MSG_DE=(
   [q_domain]="Panel-Domain (A-Record muss hierher zeigen): "
   [q_email]="E-Mail für Let's Encrypt (kann leer sein): "
   [q_admin]="Admin-Login [admin]: "
-  [q_password]="Passwort des Panel-Administrators (min. 12 Zeichen, Eingabe verborgen): "
-  [pw_short]="Das Passwort ist kürzer als 12 Zeichen — bitte erneut."
   [already_running]="Der Installer läuft bereits in einem anderen Terminal. Bitte warten."
   [q_firewall]="Firewall einrichten (SSH-Port %s, 80, 443, 8443)? [J/n]: "
   [confirm]="flypanel auf %s für %s installieren? [J/n]: "
@@ -171,8 +180,15 @@ declare -A MSG_DE=(
   [skip]="übersprungen"
   [dry]="[dry-run]"
   [admin_exists]="Admin existiert bereits — Schritt übersprungen."
-  [admin_skip]="Kein Admin (--yes). Manuell: sudo -u flypanel env FLYPANEL_ENV=%s/.env %s/bin/flypanel admin init"
   [done]="Fertig. Panel: https://%s"
+  [conn_title]="Panel-Zugang:"
+  [conn_url]="  URL:        https://%s"
+  [conn_local]="  lokal:      http://127.0.0.1:3002/"
+  [conn_login]="  Login:      %s"
+  [conn_password]="  Passwort:   %s"
+  [conn_keep]="Passwort unverändert — der Admin existierte bereits."
+  [conn_dry]="Das Passwort wird bei der Installation erzeugt."
+  [conn_saved]="Das Passwort steht auch im Installationslog. Ändern in den Einstellungen."
   [log_path]="Installationslog: %s"
   [ssh_unknown]="SSH-Port nicht erkannt — Firewall NICHT aktiviert. Ports manuell öffnen oder --skip-firewall."
   [caddy_foreign]="Fremde Konfiguration in /etc/caddy/Caddyfile — unberührt."
@@ -414,21 +430,10 @@ preflight() {
   SSH_PORT=$(detect_ssh_port)
 }
 
-# ask_password reads the admin password without echo. The value stays in a
-# shell variable: it never reaches argv (visible in ps) or the install log.
-ask_password() {
-  local pw
-  while :; do
-    printf '%s' "$(t q_password)" >&2
-    IFS= read -rs pw || pw=""
-    printf '\n' >&2
-    if [ "${#pw}" -lt 12 ]; then
-      say pw_short
-      continue
-    fi
-    ADMIN_PASSWORD=$pw
-    return 0
-  done
+# gen_password makes a random admin password: 16 alphanumerics from the kernel
+# pool. The install log keeps a copy so the user can read it after the run.
+gen_password() {
+  head -c 256 /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9' | cut -c1-16
 }
 
 # panel_admin_exists reports whether the installed panel already has an admin,
@@ -450,9 +455,6 @@ collect_answers() {
   [ -n "$EMAIL" ] || EMAIL=$(ask "$(t q_email)" "")
   ADMIN_NAME=$(ask "$(t q_admin)" "$ADMIN_NAME")
   [ -n "$ADMIN_NAME" ] || ADMIN_NAME=admin
-  if ! $ASSUME_YES && ! panel_admin_exists; then
-    ask_password
-  fi
   local fw
   fw=$(ask "$(printf "$(t q_firewall)" "$SSH_PORT")" "y")
   case $fw in [nN]*) SKIP_FIREWALL=true ;; esac
@@ -857,24 +859,36 @@ admin_step() {
     say admin_exists
     return
   fi
-  if $ASSUME_YES; then
-    sayf admin_skip "$PANEL_DIR" "$PANEL_DIR"
-    return
-  fi
-  [ -n "$ADMIN_PASSWORD" ] || ask_password
+  ADMIN_PASSWORD=$(gen_password)
   # Flags before username: the flag package stops parsing at the first
   # positional argument.
   printf '%s\n' "$ADMIN_PASSWORD" |
     runuser -u flypanel -- env FLYPANEL_ENV="$PANEL_DIR/.env" "$bin" admin init --password-stdin "$ADMIN_NAME" || {
     printf 'admin init failed\n' >&2
     ADMIN_FAILED=true
+    return
   }
-  ADMIN_PASSWORD=""
+  ADMIN_CREATED=1
+  ok
 }
 
 summary() {
   printf '\n'
   sayf done "$DOMAIN"
+  # Credentials come last: the user scrolls here once the steps are done.
+  say conn_title
+  sayf conn_url "$DOMAIN"
+  if [ "$HTTPS_PENDING" = 1 ]; then say conn_local; fi
+  sayf conn_login "$ADMIN_NAME"
+  if $DRY_RUN; then
+    say conn_dry
+  elif [ "$ADMIN_CREATED" = 1 ]; then
+    sayf conn_password "$ADMIN_PASSWORD"
+    say conn_saved
+  else
+    say conn_keep
+  fi
+  ADMIN_PASSWORD=""
   sayf log_path "$INSTALL_LOG"
   say update_hint
   if [ "$HTTPS_PENDING" = 1 ]; then say https_warn; fi

@@ -125,10 +125,11 @@ grep -q 'flypanel installer' "$WORK/dry.out"; check "dry-run speaks english" 0 $
 grep -q 'dry-run' "$WORK/dry.out"; check "dry-run prints actions" 0 $?
 
 # --- admin password ----------------------------------------------------------
-ADMIN_PASSWORD=""
-# здесь here-string, а не пайп: пайп увёл бы присваивание в субшелл
-ask_password <<< $'short\nLongPassword-123' >/dev/null 2>&1
-check "short password reprompts" "LongPassword-123" "$ADMIN_PASSWORD"
+P1=$(gen_password)
+check "generated password length" 16 "${#P1}"
+check "generated password is alphanumeric" "" "$(printf '%s' "$P1" | tr -d 'A-Za-z0-9')"
+P2=$(gen_password)
+[ "$P1" != "$P2" ]; check "two passwords differ" 0 $?
 
 runuser() { # stub: no admin yet, init records argv and stdin
   if [[ "$*" == *" status"* ]]; then return 1; fi
@@ -136,14 +137,20 @@ runuser() { # stub: no admin yet, init records argv and stdin
   cat > "$WORK/stdin"
 }
 ADMIN_NAME=admin
-ADMIN_PASSWORD="LongPassword-123"
-ASSUME_YES=false
+ASSUME_YES=true # --yes must create the admin too: the password is generated, not asked
 DRY_RUN=false
+ADMIN_CREATED=0
+ADMIN_PASSWORD=""
 admin_step >/dev/null 2>&1
 grep -q -- '--password-stdin admin' "$WORK/argv"; check "admin init uses stdin" 0 $?
-check "password goes to stdin" "LongPassword-123" "$(cat "$WORK/stdin")"
-check "password cleared after init" "" "$ADMIN_PASSWORD"
+check "generated password goes to stdin" "$ADMIN_PASSWORD" "$(cat "$WORK/stdin")"
+check "admin created flag kept for the summary" 1 "$ADMIN_CREATED"
 unset -f runuser
+
+summary_out=$(FIREWALL_FAILED=false ADMIN_FAILED=false HTTPS_PENDING=0 DOMAIN=panel.fly-net.io \
+  ADMIN_NAME=admin ADMIN_CREATED=1 ADMIN_PASSWORD=LongPass-123456 INSTALL_LOG=/tmp/x.log summary 2>&1)
+printf '%s' "$summary_out" | grep -q 'LongPass-123456'; check "summary prints the password" 0 $?
+printf '%s' "$summary_out" | grep -q 'panel.fly-net.io'; check "summary prints the url" 0 $?
 
 # --- package accounting ------------------------------------------------------
 FAMILY=apt
