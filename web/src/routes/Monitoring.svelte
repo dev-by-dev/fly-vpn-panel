@@ -202,6 +202,7 @@
 		void view;
 		void range;
 		void i18n.lang;
+		void points; // новая точка каждые 15 с: перестраиваем графики
 		const count = points.length;
 		if (view !== 'caddy' || count === 0) return;
 		void buildCharts();
@@ -215,11 +216,15 @@
 		};
 	});
 
+	// Caddy опрашиваем сам: скрейпер пишет точку раз в 15 с, ручная кнопка не нужна.
 	$effect(() => {
-		if (view === 'caddy') void loadCaddy();
+		if (view !== 'caddy') return;
+		void loadCaddy();
+		const id = setInterval(() => void loadCaddy(), 15000);
+		return () => clearInterval(id);
 	});
 
-	// Автообновление: обновляем только видимый список логов, графики ходят по кнопке.
+	// Автообновление логов.
 	$effect(() => {
 		if (!auto || paused || view !== 'logs') return;
 		const id = setInterval(() => void loadLogs(), 5000);
@@ -316,9 +321,6 @@
 					onclick={() => (range = r)}>{r}</button
 				>
 			{/each}
-			<Button class="ml-auto" variant="outline" onclick={() => void loadCaddy()}
-				>{t('common.refresh')}</Button
-			>
 		</div>
 
 		{#if caddyErr}

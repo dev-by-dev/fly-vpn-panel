@@ -124,6 +124,23 @@ describe('monitoring page', () => {
     expect(configs.length).toBe(0);
   });
 
+  test('caddy обновляется сам, без кнопки', async () => {
+    vi.useFakeTimers();
+    mockFetch();
+    render(Monitoring);
+    await fireEvent.click(screen.getByRole('button', { name: 'Caddy' }));
+    await vi.advanceTimersByTimeAsync(0);
+    const caddyCalls = () => urls.filter((u) => u.includes('/api/monitoring/caddy')).length;
+    const first = caddyCalls();
+    expect(first).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: 'Обновить' })).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(15100);
+    expect(caddyCalls()).toBeGreaterThan(first);
+
+    vi.useRealTimers();
+  });
+
   test('английский язык переводит страницу мониторинга', async () => {
     mockFetch([]);
     setLang('en');
