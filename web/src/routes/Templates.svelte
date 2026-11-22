@@ -14,7 +14,7 @@
   // только набор ниже; yaml.go exposes только {{PROXIES}}/{{PROXY_NAMES}} —
   // per-proxy поля (UUID/ADDRESS/…) живут внутри сгенерированной подстановки.
   const hints: Record<Format, string> = {
-    json: '{{UUID}} {{ADDRESS}} {{PORT}} {{PBK}} {{SID}} {{SNI}} {{FP}} {{PATH}} {{MODE}} {{TAG}}',
+    json: '{{UUID}} {{ADDRESS}} {{PORT}} {{NETWORK}} {{PBK}} {{SID}} {{SNI}} {{FP}} {{PATH}} {{MODE}} {{TAG}}',
     mihomo: '{{PROXIES}} {{PROXY_NAMES}} (поля внутри — UUID/ADDRESS/PORT/SNI/PATH/…)',
     clash: '{{PROXIES}} {{PROXY_NAMES}} (поля внутри — UUID/ADDRESS/PORT/SNI/PATH/…)',
   };

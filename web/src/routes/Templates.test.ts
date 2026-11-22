@@ -8,7 +8,7 @@ import Templates from './Templates.svelte';
 // internal/sub/yaml.go exposes только PROXIES/PROXY_NAMES — per-proxy
 // поля (UUID/ADDRESS/…) живут внутри сгенерированной подстановки.
 const JSON_ALLOWED = new Set([
-  'UUID', 'ADDRESS', 'PORT', 'PBK', 'SID', 'SNI', 'FP', 'PATH', 'MODE', 'TAG',
+  'UUID', 'ADDRESS', 'PORT', 'NETWORK', 'PBK', 'SID', 'SNI', 'FP', 'PATH', 'MODE', 'TAG',
 ]);
 const YAML_ALLOWED = new Set(['PROXIES', 'PROXY_NAMES']);
 
@@ -30,14 +30,10 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-test('json hint: только плейсхолдеры из json.go, без {{USERNAME}}', () => {
+test('json hint: ровно плейсхолдеры, которые подставляет json.go', () => {
   const { container } = render(Templates);
   const tokens = placeholders(hintText(container));
-  expect(tokens.length).toBeGreaterThan(0);
-  for (const t of tokens) {
-    expect(JSON_ALLOWED.has(t), `json hint рекламирует ${t}`).toBe(true);
-  }
-  expect(tokens).not.toContain('USERNAME');
+  expect(new Set(tokens)).toEqual(JSON_ALLOWED);
 });
 
 test.each(['mihomo', 'clash'])('%s hint: только {{PROXIES}}/{{PROXY_NAMES}} из yaml.go', async (fmt) => {
