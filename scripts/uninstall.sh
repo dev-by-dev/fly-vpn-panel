@@ -6,6 +6,7 @@ set -euo pipefail
 UNINSTALL_LOG=${UNINSTALL_LOG:-/var/log/flypanel-uninstall.log}
 OS_RELEASE_FILE=${OS_RELEASE_FILE:-/etc/os-release}
 PANEL_DIR=/opt/flypanel
+CADDY_DIR=${CADDY_DIR:-/etc/caddy}
 ACCESS_PORT=3002
 
 DRY_RUN=false
@@ -158,7 +159,6 @@ caddyfile_strip() {
   if ! caddyfile_has_content "$tmp"; then
     rm -f "$tmp"
     remove_path "$path"
-    run rmdir -- "$(dirname "$path")" 2>/dev/null || true
     return 1
   fi
   if $DRY_RUN; then
@@ -203,12 +203,19 @@ stop_units() {
 
 remove_caddy_config() {
   step step_caddy
-  local file=/etc/caddy/Caddyfile rc=0
+  local file=$CADDY_DIR/Caddyfile rc=0 f
   if [ ! -f "$file" ]; then say skip; return 0; fi
   caddyfile_strip "$file" || rc=$?
   case $rc in
     0) say caddy_kept ;;
     2) say caddy_foreign ;;
+    1)
+      # Our backups go with our file, otherwise the directory never empties.
+      for f in "$CADDY_DIR"/Caddyfile.bak-*; do
+        if [ -e "$f" ]; then remove_path "$f"; fi
+      done
+      run rmdir -- "$CADDY_DIR" 2>/dev/null || true
+      ;;
   esac
   ok
 }

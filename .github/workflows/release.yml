@@ -30,7 +30,8 @@ jobs:
       - name: Checksums
         run: |
           cp scripts/install.sh bin/install.sh
-          cd bin && sha256sum flypanel-linux-amd64 install.sh > sha256sums.txt
+          cp scripts/uninstall.sh bin/uninstall.sh
+          cd bin && sha256sum flypanel-linux-amd64 install.sh uninstall.sh > sha256sums.txt
           cat sha256sums.txt
 
       - uses: softprops/action-gh-release@v2
@@ -38,4 +39,5 @@ jobs:
           files: |
             bin/flypanel-linux-amd64
             bin/install.sh
+            bin/uninstall.sh
             bin/sha256sums.txt

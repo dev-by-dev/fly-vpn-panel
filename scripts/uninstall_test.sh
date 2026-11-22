@@ -50,5 +50,13 @@ rm -rf "$tmp"
 check "ssh port never removed" "! firewall_ports | grep -qx '22\\|2222'"
 check "web ports listed" "firewall_ports | grep -qx 80 && firewall_ports | grep -qx 443 && firewall_ports | grep -qx 8443"
 
+# 5: our file and our backups -> directory is gone
+mkdir -p "$tmp/e"; printf '{\n\tmetrics\n}\n# flypanel-managed begin\np.example.org {\n\tlog\n}\n# flypanel-managed end\n' > "$tmp/e/Caddyfile"
+: > "$tmp/e/Caddyfile.bak-202601010000"
+OLD_DIR=$CADDY_DIR; CADDY_DIR=$tmp/e
+remove_caddy_config >/dev/null 2>&1
+CADDY_DIR=$OLD_DIR
+check "backups removed with our caddyfile" "[ ! -d '$tmp/e' ]"
+
 printf '%s failures\n' "$fails"
 [ "$fails" -eq 0 ]

@@ -17,6 +17,19 @@ Non-interactive: `sudo bash install.sh --yes --domain panel.example.org`. Other 
 
 Manual install on other distributions: [docs/deploy-checklist.md](docs/deploy-checklist.md).
 
+## Uninstall
+
+```sh
+curl -fsSL https://github.com/dev-by-dev/fly-vpn-panel/releases/latest/download/uninstall.sh -o uninstall.sh
+sudo bash uninstall.sh
+```
+
+The script asks for the language and makes you type `delete` before anything happens: **the panel data (`/opt/flypanel/data`, including `panel.db` with users, tokens and subscriptions) is deleted without a backup**. Then it removes the panel and xray binaries, both systemd units, our Caddyfile block (a Caddyfile with only our lines is deleted entirely), the `flypanel` and `caddy` users, and the firewall rules for 80/443/8443.
+
+Kept on purpose: packages, the firewall stays enabled, and the SSH rule is never touched.
+
+Flags: `--lang ru|en|de`, `--yes` (skip the confirmation word), `--dry-run`, `--skip-firewall`, `--force`.
+
 ## Prerequisites
 
 - Go ≥ 1.27
