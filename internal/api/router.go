@@ -66,8 +66,13 @@ func NewRouter(d Deps) http.Handler {
 	interval := PollInterval(d.Store, d.Cfg)
 	usersH := &users.Handlers{Store: d.Store, Client: d.Client, PollInterval: interval}
 	subH := &sub.Handlers{Store: d.Store, EntryIP: d.Cfg.EntryIP}
+	// Monitor читает логи; если main не передал свой Reader, берём данные из DATA_DIR.
+	monitor := d.Monitor
+	if monitor == nil && d.Cfg != nil {
+		monitor = &monitoring.Reader{DataDir: d.Cfg.DataDir}
+	}
 	apiH := &Handlers{
-		Store: d.Store, Mgr: d.Manager, Poller: d.Poller, Monitor: d.Monitor,
+		Store: d.Store, Mgr: d.Manager, Poller: d.Poller, Monitor: monitor,
 		PanelDomain: d.Cfg.PanelDomain, EntryIP: d.Cfg.EntryIP, interval: interval,
 		Client:  d.Client,
 		DataDir: d.Cfg.DataDir,

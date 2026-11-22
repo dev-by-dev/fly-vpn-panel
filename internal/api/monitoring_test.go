@@ -135,3 +135,11 @@ func TestMonitoringCaddyCounterReset(t *testing.T) {
 		t.Errorf("summary.requests = %v, want 30", summary["requests"])
 	}
 }
+
+func TestMonitoringXrayDefaultsToDataDir(t *testing.T) {
+	h, _, j := newTestRouter(t)
+	rr := doReq(t, h, http.MethodGet, "/api/monitoring/logs?source=xray", accessCookie(t, j), nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (missing xray log is an empty list)", rr.Code)
+	}
+}
