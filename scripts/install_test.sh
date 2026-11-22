@@ -124,6 +124,27 @@ check "dry-run exit 0" 0 $?
 grep -q 'flypanel installer' "$WORK/dry.out"; check "dry-run speaks english" 0 $?
 grep -q 'dry-run' "$WORK/dry.out"; check "dry-run prints actions" 0 $?
 
+# --- admin password ----------------------------------------------------------
+ADMIN_PASSWORD=""
+# здесь here-string, а не пайп: пайп увёл бы присваивание в субшелл
+ask_password <<< $'short\nLongPassword-123' >/dev/null 2>&1
+check "short password reprompts" "LongPassword-123" "$ADMIN_PASSWORD"
+
+runuser() { # stub: no admin yet, init records argv and stdin
+  if [[ "$*" == *" status"* ]]; then return 1; fi
+  printf '%s\n' "$*" > "$WORK/argv"
+  cat > "$WORK/stdin"
+}
+ADMIN_NAME=admin
+ADMIN_PASSWORD="LongPassword-123"
+ASSUME_YES=false
+DRY_RUN=false
+admin_step >/dev/null 2>&1
+grep -q -- '--password-stdin admin' "$WORK/argv"; check "admin init uses stdin" 0 $?
+check "password goes to stdin" "LongPassword-123" "$(cat "$WORK/stdin")"
+check "password cleared after init" "" "$ADMIN_PASSWORD"
+unset -f runuser
+
 # --- package accounting ------------------------------------------------------
 FAMILY=apt
 check "new_packages skips installed" 0 "$(new_packages bash | grep -c .)"
