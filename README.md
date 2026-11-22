@@ -24,11 +24,13 @@ curl -fsSL https://github.com/dev-by-dev/fly-vpn-panel/releases/latest/download/
 sudo bash uninstall.sh
 ```
 
-The script asks for the language and makes you type `delete` before anything happens: **the panel data (`/opt/flypanel/data`, including `panel.db` with users, tokens and subscriptions) is deleted without a backup**. Then it removes the panel and xray binaries, both systemd units, our Caddyfile block (a Caddyfile with only our lines is deleted entirely), the `flypanel` and `caddy` users, and the firewall rules for 80/443/8443.
+The script asks for the language and makes you type `delete` before anything happens: **the panel data (`/opt/flypanel/data`, including `panel.db` with users, tokens and subscriptions) is deleted without a backup**. Then it removes the panel and xray binaries, both systemd units, our Caddyfile block (a Caddyfile with only our lines is deleted entirely), the `flypanel` and `caddy` users, the firewall rules for 80/443/8443, and the packages the installer added.
 
-Kept on purpose: packages, the firewall stays enabled, and the SSH rule is never touched.
+Package removal is exact: `install.sh` writes the list of packages it actually installed to `/opt/flypanel/installed-packages`, and only those are purged — anything that was on the machine before stays. An installation made before that file existed falls back to the extras a base system lacks (`ufw unzip` / `firewalld policycoreutils-python-utils`); `curl`, `ca-certificates` and `iproute2` are never removed. `--keep-packages` skips this step.
 
-Flags: `--lang ru|en|de`, `--yes` (skip the confirmation word), `--dry-run`, `--skip-firewall`, `--force`.
+Kept on purpose: the SSH rule and everything that was on the machine before the install.
+
+Flags: `--lang ru|en|de`, `--yes` (skip the confirmation word), `--dry-run`, `--skip-firewall`, `--keep-packages`, `--force`.
 
 ## Prerequisites
 

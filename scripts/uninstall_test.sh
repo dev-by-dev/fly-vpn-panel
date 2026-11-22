@@ -82,5 +82,33 @@ remove_caddy_config >/dev/null 2>&1
 CADDY_DIR=$OLD_DIR
 check "backups removed with our caddyfile" "[ ! -d '$tmp/e' ]"
 
+# 7: packages the installer added are removed, nothing else
+mkdir -p "$tmp/pk"; printf 'unzip\nufw\n' > "$tmp/pk/installed-packages"
+PKG_FILE=$tmp/pk/installed-packages
+check "package list is read" "[ \"\$(read_packages)\" = 'unzip ufw' ]"
+PKG_FILE=$tmp/pk/missing
+check "no list -> extras fallback" "[ \"\$(read_packages)\" = 'ufw unzip' ]"
+
+mkdir -p "$tmp/stub"
+cat > "$tmp/stub/apt-get" <<'SH'
+#!/bin/sh
+printf '%s\n' "$*" >> "$APT_LOG"
+SH
+chmod +x "$tmp/stub/apt-get"
+APT_LOG=$tmp/apt.log; : > "$APT_LOG"; export APT_LOG
+OLD_PATH=$PATH
+FAMILY=apt; PKGS="unzip ufw"; PATH="$tmp/stub:$PATH"
+remove_packages >/dev/null 2>&1
+check "packages purged" "grep -qx 'purge -y -qq unzip ufw' '$APT_LOG'"
+: > "$APT_LOG"; PKGS=""
+remove_packages >/dev/null 2>&1
+check "empty list purges nothing" "[ ! -s '$APT_LOG' ]"
+PKGS="unzip"; KEEP_PACKAGES=true
+remove_packages >/dev/null 2>&1
+check "keep-packages purges nothing" "[ ! -s '$APT_LOG' ]"
+KEEP_PACKAGES=false; PKGS=""
+PATH=$OLD_PATH
+rm -rf "$tmp/pk" "$tmp/stub" "$APT_LOG"
+
 printf '%s failures\n' "$fails"
 [ "$fails" -eq 0 ]

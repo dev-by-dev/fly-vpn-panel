@@ -26,6 +26,7 @@ FAMILY=""
 SSH_PORT=""
 FIREWALL_FAILED=false
 ADMIN_FAILED=false
+PKG_NEW=""
 
 # Ruling: associative arrays instead of numeric indexes — same single file,
 # no off-by-one between the three dictionaries.
@@ -187,6 +188,20 @@ fatal() {
 }
 
 have() { command -v "$1" >/dev/null 2>&1; }
+
+pkg_installed() {
+  case $FAMILY in
+    apt) dpkg -s "$1" >/dev/null 2>&1 ;;
+    *) rpm -q "$1" >/dev/null 2>&1 ;;
+  esac
+}
+
+# new_packages <pkg...>: prints the ones that are not installed yet.
+new_packages() {
+  local p out=""
+  for p in "$@"; do pkg_installed "$p" || out="$out $p"; done
+  printf '%s' "${out# }"
+}
 
 # run executes a command, or prints it in --dry-run mode.
 run() {
@@ -418,12 +433,21 @@ confirm() {
 
 install_packages() {
   step step_packages
+  local pkgs
+  if [ "$FAMILY" = apt ]; then
+    pkgs="curl ca-certificates unzip ufw iproute2"
+  else
+    pkgs="curl ca-certificates unzip firewalld policycoreutils-python-utils iproute"
+  fi
+  # Remember only what we add: the uninstaller must not strip packages that
+  # were already on the machine.
+  PKG_NEW=$(new_packages $pkgs)
   if $DRY_RUN; then printf '   %s packages via %s\n' "$(t dry)" "$FAMILY"; return; fi
   if [ "$FAMILY" = apt ]; then
     DEBIAN_FRONTEND=noninteractive apt-get update -qq
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl ca-certificates unzip ufw iproute2
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $pkgs
   else
-    dnf install -y -q curl ca-certificates unzip firewalld policycoreutils-python-utils iproute
+    dnf install -y -q $pkgs
     systemctl enable --now firewalld
   fi
   ok
@@ -433,6 +457,9 @@ create_user_dirs() {
   step step_user
   run useradd --system --home-dir "$PANEL_DIR" --shell /usr/sbin/nologin flypanel 2>/dev/null || true
   run mkdir -p "$PANEL_DIR/bin" "$PANEL_DIR/data" "$PANEL_DIR/logs" "$PANEL_DIR/backups"
+  if [ -n "$PKG_NEW" ] && ! $DRY_RUN; then
+    printf '%s\n' $PKG_NEW > "$PANEL_DIR/installed-packages"
+  fi
   ok
 }
 

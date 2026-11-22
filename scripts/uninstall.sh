@@ -9,14 +9,18 @@ SSHD_T_CMD=${SSHD_T_CMD:-sshd -T}
 PANEL_DIR=/opt/flypanel
 CADDY_DIR=${CADDY_DIR:-/etc/caddy}
 ACCESS_PORT=3002
+# Written by install.sh: only the packages the installer itself added.
+PKG_FILE=${PKG_FILE:-$PANEL_DIR/installed-packages}
 
 DRY_RUN=false
 ASSUME_YES=false
 SKIP_FIREWALL=false
+KEEP_PACKAGES=false
 FORCE=false
 LANG_SEL=${LANG_SEL:-}
 FAMILY=""
 CADDY_OURS=false
+PKGS=""
 
 declare -A MSG_RU=(
   [welcome]="Удаление панели flypanel"
@@ -31,6 +35,7 @@ declare -A MSG_RU=(
   [step_caddy]="Caddy"
   [step_files]="Файлы"
   [step_user]="Пользователи"
+  [step_packages]="Пакеты"
   [step_firewall]="Фаервол"
   [step_selinux]="SELinux"
   [step_logs]="Логи"
@@ -39,7 +44,9 @@ declare -A MSG_RU=(
   [dry]="[dry-run]"
   [nothing]="Удалять нечего: панель не установлена."
   [done]="Готово. Машина очищена."
-  [keep_notes]="Оставлено намеренно: пакеты, фаервол включён, правило SSH-порта."
+  [keep_notes]="Оставлено намеренно: правило SSH-порта и всё, что было на машине до установки."
+  [pkg_none]="Пакетов, поставленных установщиком, нет."
+  [pkg_kept]="Пакеты оставлены (--keep-packages)."
   [err_user_busy]="Не удалось удалить юзера %s: есть процессы (--force, чтобы продолжить)."
   [caddy_foreign]="В /etc/caddy/Caddyfile нет нашего блока — файл не трогаю."
   [caddy_kept]="Чужой сайт в Caddyfile остался, наш блок убран."
@@ -58,6 +65,7 @@ declare -A MSG_EN=(
   [step_caddy]="Caddy"
   [step_files]="Files"
   [step_user]="Users"
+  [step_packages]="Packages"
   [step_firewall]="Firewall"
   [step_selinux]="SELinux"
   [step_logs]="Logs"
@@ -66,7 +74,9 @@ declare -A MSG_EN=(
   [dry]="[dry-run]"
   [nothing]="Nothing to remove: flypanel is not installed."
   [done]="Done. The server has been cleaned up."
-  [keep_notes]="Kept on purpose: packages, firewall stays enabled, SSH rule."
+  [keep_notes]="Kept on purpose: the SSH rule and everything that was on the machine before the install."
+  [pkg_none]="No packages were installed by the installer."
+  [pkg_kept]="Packages kept (--keep-packages)."
   [err_user_busy]="Could not remove user %s: running processes (--force to continue)."
   [caddy_foreign]="No flypanel block in /etc/caddy/Caddyfile — leaving the file alone."
   [caddy_kept]="Foreign site kept in the Caddyfile, our block removed."
@@ -85,6 +95,7 @@ declare -A MSG_DE=(
   [step_caddy]="Caddy"
   [step_files]="Dateien"
   [step_user]="Benutzer"
+  [step_packages]="Pakete"
   [step_firewall]="Firewall"
   [step_selinux]="SELinux"
   [step_logs]="Logs"
@@ -93,7 +104,9 @@ declare -A MSG_DE=(
   [dry]="[dry-run]"
   [nothing]="Nichts zu löschen: flypanel ist nicht installiert."
   [done]="Fertig. Der Server ist bereinigt."
-  [keep_notes]="Absichtlich behalten: Pakete, Firewall bleibt aktiv, SSH-Regel."
+  [keep_notes]="Absichtlich behalten: die SSH-Regel und alles, was vor der Installation da war."
+  [pkg_none]="Der Installer hat keine Pakete hinzugefügt."
+  [pkg_kept]="Pakete behalten (--keep-packages)."
   [err_user_busy]="Benutzer %s konnte nicht gelöscht werden: laufende Prozesse (--force zum Fortsetzen)."
   [caddy_foreign]="Kein flypanel-Block in /etc/caddy/Caddyfile — Datei bleibt unverändert."
   [caddy_kept]="Fremde Site in der Caddyfile bleibt, unser Block ist entfernt."
@@ -307,6 +320,37 @@ remove_selinux_ports() {
   ok
 }
 
+# read_packages: the packages install.sh added, space separated. An older
+# install has no list, so fall back to the extras a base system lacks.
+read_packages() {
+  if [ -f "$PKG_FILE" ]; then
+    tr '\n' ' ' < "$PKG_FILE" | sed 's/[[:space:]]*$//'
+    return 0
+  fi
+  if have apt-get; then
+    printf '%s' "ufw unzip"
+  elif have dnf; then
+    printf '%s' "firewalld policycoreutils-python-utils"
+  fi
+}
+
+remove_packages() {
+  step step_packages
+  if $KEEP_PACKAGES; then say pkg_kept; return 0; fi
+  if [ -z "$PKGS" ]; then say pkg_none; return 0; fi
+  # firewalld would keep a half-removed firewall unit around.
+  case " $PKGS " in *" firewalld "*) quiet systemctl disable --now firewalld ;; esac
+  if have apt-get; then
+    run env DEBIAN_FRONTEND=noninteractive apt-get purge -y -qq $PKGS
+  elif have dnf; then
+    run dnf remove -y -q $PKGS
+  else
+    say pkg_none
+    return 0
+  fi
+  ok
+}
+
 parse_args() {
   while [ $# -gt 0 ]; do
     case $1 in
@@ -314,6 +358,7 @@ parse_args() {
       --yes|-y) ASSUME_YES=true; shift ;;
       --dry-run) DRY_RUN=true; shift ;;
       --skip-firewall) SKIP_FIREWALL=true; shift ;;
+      --keep-packages) KEEP_PACKAGES=true; shift ;;
       --force) FORCE=true; shift ;;
       -h|--help) usage; exit 0 ;;
       *) printf 'unknown argument: %s (see --help)\n' "$1" >&2; exit 2 ;;
@@ -323,7 +368,7 @@ parse_args() {
 
 usage() {
   cat <<'EOF'
-usage: uninstall.sh [--lang ru|en|de] [--yes] [--dry-run] [--skip-firewall] [--force]
+usage: uninstall.sh [--lang ru|en|de] [--yes] [--dry-run] [--skip-firewall] [--keep-packages] [--force]
 EOF
 }
 
@@ -400,6 +445,8 @@ main() {
 
   local panel=0
   if panel_installed; then panel=1; fi
+  # Read before remove_files: the list lives inside $PANEL_DIR.
+  PKGS=$(read_packages)
 
   stop_units
   remove_caddy_config
@@ -409,6 +456,7 @@ main() {
     remove_firewall_rules
     remove_selinux_ports
   fi
+  remove_packages
 
   step step_logs
   remove_path /var/log/flypanel-install.log

@@ -122,5 +122,10 @@ check "dry-run exit 0" 0 $?
 grep -q 'flypanel installer' "$WORK/dry.out"; check "dry-run speaks english" 0 $?
 grep -q 'dry-run' "$WORK/dry.out"; check "dry-run prints actions" 0 $?
 
+# --- package accounting ------------------------------------------------------
+FAMILY=apt
+check "new_packages skips installed" 0 "$(new_packages bash | grep -c .)"
+check "new_packages keeps missing" no-such-pkg-xyz "$(new_packages bash no-such-pkg-xyz)"
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
