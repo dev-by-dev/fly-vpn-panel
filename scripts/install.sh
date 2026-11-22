@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# flypanel installer: Ubuntu 24.04 / CentOS Stream 9-10, x86_64.
+# flypanel installer: Ubuntu 22.04/24.04 / CentOS Stream 9-10, x86_64.
 # Idempotent: re-runs update the binary and the managed Caddy block only.
 set -euo pipefail
 
@@ -38,7 +38,7 @@ declare -A MSG_RU=(
   [welcome]="Установка панели flypanel"
   [lang_ask]="Выбери язык / Choose language / Sprache wählen [1] ru [2] en [3] de: "
   [need_root]="Нужен root: sudo bash %s"
-  [unsupported_os]="Поддерживаются Ubuntu 24.04 и CentOS Stream 9/10 (x86_64). Нашлось: %s. Для ручной установки: docs/deploy-checklist.md"
+  [unsupported_os]="Поддерживаются Ubuntu 22.04/24.04 и CentOS Stream 9/10 (x86_64). Нашлось: %s. Для ручной установки: docs/deploy-checklist.md"
   [no_systemd]="systemd не найден — это не VPS и не сервер."
   [container]="Похоже на контейнер: systemd/journald работать не будут."
   [disk_low]="Мало места на /: нужно 2 ГБ, свободно %s МБ."
@@ -94,7 +94,7 @@ declare -A MSG_EN=(
   [welcome]="flypanel installer"
   [lang_ask]="Choose language [1] ru [2] en [3] de: "
   [need_root]="Root is required: sudo bash %s"
-  [unsupported_os]="Supported: Ubuntu 24.04 and CentOS Stream 9/10 (x86_64). Found: %s. Manual install: docs/deploy-checklist.md"
+  [unsupported_os]="Supported: Ubuntu 22.04/24.04 and CentOS Stream 9/10 (x86_64). Found: %s. Manual install: docs/deploy-checklist.md"
   [no_systemd]="systemd not found — this is not a server/VPS."
   [container]="Looks like a container: systemd/journald will not work."
   [disk_low]="Not enough space on /: 2 GB needed, %s MB free."
@@ -150,7 +150,7 @@ declare -A MSG_DE=(
   [welcome]="flypanel installieren"
   [lang_ask]="Sprache wählen [1] ru [2] en [3] de: "
   [need_root]="Root erforderlich: sudo bash %s"
-  [unsupported_os]="Unterstützt: Ubuntu 24.04 und CentOS Stream 9/10 (x86_64). Gefunden: %s. Manuell: docs/deploy-checklist.md"
+  [unsupported_os]="Unterstützt: Ubuntu 22.04/24.04 und CentOS Stream 9/10 (x86_64). Gefunden: %s. Manuell: docs/deploy-checklist.md"
   [no_systemd]="systemd fehlt — kein Server/VPS."
   [container]="Sieht nach einem Container aus: systemd/journald funktionieren nicht."
   [disk_low]="Zu wenig Platz auf /: 2 GB nötig, %s MB frei."
@@ -306,7 +306,7 @@ detect_family() {
   # shellcheck disable=SC1090
   . "$OS_RELEASE_FILE" >/dev/null 2>&1 || true
   case "${ID:-}:${VERSION_ID:-}" in
-    ubuntu:24.04) echo apt ;;
+    ubuntu:22.04|ubuntu:24.04) echo apt ;;
     centos:9|centos:9.*|centos:10|centos:10.*) echo dnf ;;
     *)
       case " ${ID_LIKE:-} " in

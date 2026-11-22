@@ -31,6 +31,8 @@ os_release() { # os_release <id> <version> [id_like]
 
 # --- detect_family -----------------------------------------------------------
 os_release ubuntu 24.04 debian;      check "family ubuntu 24.04" apt "$(detect_family)"
+os_release ubuntu 22.04 debian;      check "family ubuntu 22.04" apt "$(detect_family)"
+os_release ubuntu 20.04 debian;      check "family ubuntu 20.04" unsupported "$(detect_family)"
 os_release centos 9 "";              check "family centos 9"     dnf "$(detect_family)"
 os_release centos 10 "";             check "family centos 10"    dnf "$(detect_family)"
 os_release rocky 9 "rhel centos fedora"; check "family id_like rhel" dnf "$(detect_family)"

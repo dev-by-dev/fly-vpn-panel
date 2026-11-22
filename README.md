@@ -4,7 +4,7 @@ Web Control Panel for VPN — self-hosted panel (Go backend, embedded Svelte 5 S
 
 ## Install on a server
 
-Requirements: Ubuntu 24.04 or CentOS Stream 9/10, x86_64, root, a domain with an A record pointing at the server, SSH on a known port.
+Requirements: Ubuntu 22.04/24.04 or CentOS Stream 9/10, x86_64, root, a domain with an A record pointing at the server, SSH on a known port.
 
 ```sh
 curl -fsSL https://github.com/dev-by-dev/fly-vpn-panel/releases/latest/download/install.sh -o install.sh
