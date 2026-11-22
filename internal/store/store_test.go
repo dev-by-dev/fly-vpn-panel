@@ -6,7 +6,7 @@ import (
 
 var allTables = []string{
 	"admin", "backup_codes", "users", "inbounds",
-	"settings", "traffic_samples", "devices", "refresh_tokens",
+	"settings", "traffic_samples", "devices", "refresh_tokens", "api_tokens",
 }
 
 func schemaVersion(t *testing.T, s *Store) int {
@@ -25,8 +25,8 @@ func TestOpenMigrates(t *testing.T) {
 	}
 	defer s.Close()
 
-	if got := schemaVersion(t, s); got != 5 {
-		t.Errorf("schema version = %d, want 5", got)
+	if got := schemaVersion(t, s); got != 6 {
+		t.Errorf("schema version = %d, want 6", got)
 	}
 	for _, table := range allTables {
 		var name string
@@ -56,8 +56,8 @@ func TestOpenIdempotent(t *testing.T) {
 	}
 	defer s2.Close()
 
-	if got := schemaVersion(t, s2); got != 5 {
-		t.Errorf("schema version after reopen = %d, want 5", got)
+	if got := schemaVersion(t, s2); got != 6 {
+		t.Errorf("schema version after reopen = %d, want 6", got)
 	}
 }
 
