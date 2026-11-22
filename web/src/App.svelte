@@ -10,7 +10,6 @@
   import Dashboard from './routes/Dashboard.svelte';
   import Users from './routes/Users.svelte';
   import Inbounds from './routes/Inbounds.svelte';
-  import Routing from './routes/Routing.svelte';
   import Templates from './routes/Templates.svelte';
   import Settings from './routes/Settings.svelte';
   import Config from './routes/Config.svelte';
@@ -21,7 +20,7 @@
     '/': Dashboard,
     '/users': Users,
     '/inbounds': Inbounds,
-    '/routing': Routing,
+    '/routing': Config,
     '/templates': Templates,
     '/settings': Settings,
     '/config': Config,
@@ -32,7 +31,6 @@
     { href: '#/', path: '/', label: 'Главная' },
     { href: '#/users', path: '/users', label: 'Юзеры' },
     { href: '#/inbounds', path: '/inbounds', label: 'Inbounds' },
-    { href: '#/routing', path: '/routing', label: 'Routing' },
     { href: '#/templates', path: '/templates', label: 'Шаблоны' },
     { href: '#/settings', path: '/settings', label: 'Настройки' },
     { href: '#/config', path: '/config', label: 'Конфиг' },
