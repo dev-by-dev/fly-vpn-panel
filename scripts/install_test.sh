@@ -85,6 +85,8 @@ caddyfile_apply "$CF"; check "caddy empty file" 0 $?
 grep -q 'metrics' "$CF"; check "caddy metrics added" 0 $?
 grep -q '^# flypanel-managed begin$' "$CF"; check "caddy markers" 0 $?
 grep -q "reverse_proxy 127.0.0.1:3002" "$CF"; check "caddy proxy" 0 $?
+# mktemp создаёт 600, а caddy читает файл под своим юзером
+check "caddy file readable" 644 "$(stat -c %a "$CF")"
 
 DOMAIN=other.fly-net.io
 caddyfile_apply "$CF"; check "caddy replace managed" 0 $?

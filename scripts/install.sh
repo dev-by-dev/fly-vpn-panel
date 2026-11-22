@@ -649,6 +649,7 @@ caddyfile_apply() {
   if [ ! -s "$path" ]; then
     { printf '{\n\tmetrics\n}\n\n'; managed_block; } > "$tmp"
     mv "$tmp" "$path"
+    chmod 644 "$path"
     return 0
   fi
   if ! awk -v out="$tmp" '
