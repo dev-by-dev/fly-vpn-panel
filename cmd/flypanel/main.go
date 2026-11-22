@@ -25,7 +25,7 @@ import (
 	"flypanel/internal/xrayclient"
 )
 
-const version = "v0.1.0-dev"
+var version = "dev"
 
 // xrayAPIAddr is the loopback address of xray's dokodemo-door gRPC API
 // inbound (generated config, spec-fixed port).

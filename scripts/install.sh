@@ -769,6 +769,10 @@ summary() {
 main() {
   parse_args "$@"
   pick_lang
+  # Root before the log is opened: an unprivileged run must not print tee errors.
+  if [ "$(id -u)" -ne 0 ] && ! $DRY_RUN; then
+    sayf need_root "$0"; exit 1
+  fi
   echo "$(t welcome)"
   if ! $DRY_RUN; then
     exec > >(tee -a "$INSTALL_LOG") 2>&1
