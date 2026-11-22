@@ -124,6 +124,10 @@ func NewRouter(d Deps) http.Handler {
 	p.HandleFunc("GET /api/devices", apiH.Devices)
 	p.HandleFunc("GET /api/stats/summary", apiH.StatsSummary)
 	p.HandleFunc("GET /api/system", apiH.System)
+	p.HandleFunc("GET /api/tokens", apiH.ListTokens)
+	p.HandleFunc("POST /api/tokens", apiH.CreateToken)
+	p.HandleFunc("DELETE /api/tokens/{id}", apiH.RevokeToken)
+
 	p.HandleFunc("GET /api/settings", apiH.SettingsGet)
 	p.HandleFunc("PUT /api/settings", apiH.SettingsPut)
 
