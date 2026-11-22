@@ -60,7 +60,7 @@ func TestMiddlewareAPIToken(t *testing.T) {
 		{"bearer on login", http.MethodPost, "/api/auth/login", "fp_valid", "", 401, false},
 		{"bearer on token create", http.MethodPost, "/api/tokens", "fp_valid", "", 401, false},
 		{"bearer on token delete", http.MethodDelete, "/api/tokens/3", "fp_valid", "", 401, false},
-		{"bearer can list tokens", http.MethodGet, "/api/tokens", "fp_valid", "", 200, true},
+		{"bearer can list tokens", http.MethodGet, "/api/tokens", "fp_valid", "", 401, false},
 		{"cookie still works", http.MethodGet, "/api/stats/summary", "", access, 200, true},
 		{"cookie works on enroll", http.MethodGet, "/api/auth/2fa/enroll", "", access, 200, true},
 	}

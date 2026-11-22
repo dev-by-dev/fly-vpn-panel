@@ -344,15 +344,7 @@ func (h *Handlers) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, "internal")
 		return
 	}
-	if err := h.Store.AdminUpdatePassword(hash); err != nil {
-		jsonError(w, http.StatusInternalServerError, "internal")
-		return
-	}
-	if err := h.Store.RefreshTokenRevokeAll(); err != nil {
-		jsonError(w, http.StatusInternalServerError, "internal")
-		return
-	}
-	if err := h.Store.APITokenRevokeAll(); err != nil {
+	if err := h.Store.AdminUpdatePasswordAndRevokeTokens(hash); err != nil {
 		jsonError(w, http.StatusInternalServerError, "internal")
 		return
 	}

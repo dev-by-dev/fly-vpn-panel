@@ -149,7 +149,7 @@ test('токены: «Отозвать» удаляет токен по id', asy
   render(Settings);
   await screen.findByText('ci');
 
-  await fireEvent.click(screen.getByRole('button', { name: 'Отозвать' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Отозвать ci' }));
 
   await waitFor(() => {
     const call = fetchMock.mock.calls.find(([u]) => String(u) === '/api/tokens/1');
@@ -158,5 +158,33 @@ test('токены: «Отозвать» удаляет токен по id', asy
   });
 
   expect(await screen.findByText('Отозван')).toBeTruthy();
-  expect(screen.queryByRole('button', { name: 'Отозвать' })).toBeNull();
+  expect(screen.queryByRole('button', { name: /Отозвать/ })).toBeNull();
+});
+
+test('токены: отзыв строки не стирает ещё не скопированный токен', async () => {
+  render(Settings);
+  await screen.findByText('ci');
+
+  await fireEvent.input(screen.getByLabelText('Название'), { target: { value: 'ci' } });
+  await fireEvent.click(screen.getByRole('button', { name: 'Создать' }));
+  expect(await screen.findByText('fp_testtoken')).toBeTruthy();
+
+  await fireEvent.click(screen.getByRole('button', { name: 'Отозвать ci' }));
+
+  expect(await screen.findByText('Отозван')).toBeTruthy();
+  expect(screen.getByText('fp_testtoken')).toBeTruthy();
+});
+
+test('токены: без clipboard API копирование говорит об ошибке', async () => {
+  vi.stubGlobal('navigator', { ...navigator, clipboard: undefined });
+  render(Settings);
+  await screen.findByText('ci');
+
+  await fireEvent.input(screen.getByLabelText('Название'), { target: { value: 'ci' } });
+  await fireEvent.click(screen.getByRole('button', { name: 'Создать' }));
+  await screen.findByText('fp_testtoken');
+
+  await fireEvent.click(screen.getByRole('button', { name: 'Копировать' }));
+
+  expect(await screen.findByText('Не удалось скопировать — выдели вручную')).toBeTruthy();
 });

@@ -63,6 +63,38 @@ func (s *Store) AdminUpdatePassword(hash string) error {
 	return nil
 }
 
+// AdminUpdatePasswordAndRevokeTokens changes the password and revokes every
+// refresh and API token in one transaction, so a failure cannot leave a new
+// password with live old credentials.
+func (s *Store) AdminUpdatePasswordAndRevokeTokens(hash string) error {
+	tx, err := s.DB().Begin()
+	if err != nil {
+		return fmt.Errorf("admin password revoke: %w", err)
+	}
+	defer tx.Rollback()
+	res, err := tx.Exec(`UPDATE admin SET password_hash = ?`, hash)
+	if err != nil {
+		return fmt.Errorf("admin password revoke: %w", err)
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return fmt.Errorf("admin password revoke: rows affected: %w", err)
+	} else if n == 0 {
+		return ErrNotFound
+	}
+	for _, q := range []string{
+		`UPDATE refresh_tokens SET revoked = 1`,
+		`UPDATE api_tokens SET revoked = 1`,
+	} {
+		if _, err := tx.Exec(q); err != nil {
+			return fmt.Errorf("admin password revoke: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("admin password revoke: %w", err)
+	}
+	return nil
+}
+
 // BackupCodesReplace atomically replaces the whole backup code set.
 func (s *Store) BackupCodesReplace(hashes []string) error {
 	tx, err := s.DB().Begin()

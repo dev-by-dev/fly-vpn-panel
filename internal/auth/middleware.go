@@ -73,8 +73,7 @@ func cookieOnly(r *http.Request) bool {
 	if strings.HasPrefix(r.URL.Path, "/api/auth/") {
 		return true
 	}
-	return strings.HasPrefix(r.URL.Path, "/api/tokens") &&
-		(r.Method == http.MethodPost || r.Method == http.MethodDelete)
+	return strings.HasPrefix(r.URL.Path, "/api/tokens")
 }
 
 // readDenied hides secrets a monitoring token has no business seeing.

@@ -91,18 +91,13 @@ func (h *Handlers) CreateToken(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, "internal")
 		return
 	}
-	created, ok, err := h.Store.APITokenByHash(hash)
-	if err != nil || !ok {
-		jsonError(w, http.StatusInternalServerError, "internal")
-		return
-	}
-	out := tokenToJSON(created)
-	if out.ID == 0 {
-		out.ID = id
+	expiresAt := ""
+	if !exp.IsZero() {
+		expiresAt = exp.UTC().Format(time.RFC3339)
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{
-		"id": out.ID, "name": out.Name, "scope": out.Scope,
-		"expires_at": out.ExpiresAt, "token": raw,
+		"id": id, "name": name, "scope": body.Scope,
+		"expires_at": expiresAt, "token": raw,
 	})
 }
 

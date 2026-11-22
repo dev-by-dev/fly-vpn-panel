@@ -36,7 +36,7 @@
   let tokenDays = $state('30');
   let newToken = $state('');
   let tokenMsg = $state('');
-  let tokenOk = $state(false);
+  let copyMsg = $state('');
 
   onMount(async () => {
     void loadTokens();
@@ -178,23 +178,20 @@
       });
       const data = (await res.json().catch(() => ({}))) as { token?: string; error?: string };
       if (res.ok && data.token) {
-        tokenOk = true;
         newToken = data.token;
+        copyMsg = '';
         tokenName = '';
         await loadTokens();
       } else {
-        tokenOk = false;
         tokenMsg = data.error === 'invalid_token_request' ? 'Укажите название (до 64 символов)' : `Ошибка (${res.status})`;
       }
     } catch {
-      tokenOk = false;
       tokenMsg = 'Сеть недоступна';
     }
   }
 
   async function revokeToken(id: number) {
     tokenMsg = '';
-    newToken = '';
     try {
       const res = await apiFetch(`/api/tokens/${id}`, { method: 'DELETE' });
       if (res.ok) await loadTokens();
@@ -205,10 +202,15 @@
   }
 
   async function copyToken() {
+    copyMsg = '';
+    if (!navigator.clipboard) {
+      copyMsg = 'Не удалось скопировать — выдели вручную';
+      return;
+    }
     try {
-      await navigator.clipboard?.writeText(newToken);
+      await navigator.clipboard.writeText(newToken);
     } catch {
-      // буфер обмена недоступен (http-origin) — токен можно выделить вручную
+      copyMsg = 'Не удалось скопировать — выдели вручную';
     }
   }
 
@@ -259,6 +261,7 @@
               {:else}
                 <button
                   class="text-xs text-muted-foreground hover:text-red-400"
+                  aria-label="Отозвать {t.name}"
                   onclick={() => revokeToken(t.id)}>Отозвать</button
                 >
               {/if}
@@ -309,6 +312,9 @@
         <p class="text-xs text-amber-400">Токен показывается один раз — сохрани сейчас.</p>
         <code class="mt-1 block break-all font-mono text-sm">{newToken}</code>
         <Button variant="outline" class="mt-2" onclick={copyToken}>Копировать</Button>
+        {#if copyMsg}
+          <p class="mt-1 text-xs text-amber-400">{copyMsg}</p>
+        {/if}
       </div>
     {/if}
   </section>
