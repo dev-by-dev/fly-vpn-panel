@@ -292,8 +292,7 @@ detect_ssh_port() {
     port=$(awk 'tolower($1)=="port"{print $2; exit}' "${SSHD_CONFIG:-/etc/ssh/sshd_config}") || port=""
   fi
   if [ -z "$port" ]; then
-    ss -ltnH 2>/dev/null | awk '{n=split($4,a,":"); if (a[n]=="22") {print 22; exit}}' > /tmp/.flypanel_ssh_port
-    port=$(cat /tmp/.flypanel_ssh_port)
+    port=$(ss -ltnH 2>/dev/null | awk '{n=split($4,a,":"); if (a[n]=="22") {print 22; exit}}')
   fi
   printf '%s' "$port"
 }
@@ -495,6 +494,8 @@ env_file_write() {
   if [ -f "$path" ]; then
     cp -p "$path" "$path.bak-$(date +%Y%m%d%H%M)"
   fi
+  local old_umask
+  old_umask=$(umask)
   umask 077
   cat > "$path" <<EOF
 LISTEN_ADDR=127.0.0.1:${ACCESS_PORT}
@@ -507,6 +508,7 @@ POLL_INTERVAL_SEC=30
 COOKIE_SECURE=true
 EOF
   chmod 600 "$path" 2>/dev/null || true
+  umask "$old_umask"
 }
 
 install_env() {
@@ -659,6 +661,7 @@ caddyfile_apply() {
   fi
   { cat "$tmp"; managed_block; } > "$tmp.full"
   mv "$tmp.full" "$path"
+  chmod 644 "$path"
   rm -f "$tmp"
   return 0
 }
@@ -673,16 +676,17 @@ install_caddy() {
   local tmp
   tmp=$(mktemp -d)
   local base="https://github.com/caddyserver/caddy/releases/download/v${CADDY_VERSION}"
-  download "$base/caddy_${CADDY_VERSION}_linux_amd64.tar.gz" "$tmp/caddy.tgz"
+  download "$base/caddy_${CADDY_VERSION}_linux_amd64.tar.gz" "$tmp/caddy_${CADDY_VERSION}_linux_amd64.tar.gz"
   download "$base/caddy_${CADDY_VERSION}_checksums.txt" "$tmp/sums.txt"
   ( cd "$tmp" && grep " caddy_${CADDY_VERSION}_linux_amd64.tar.gz$" sums.txt > one.txt \
     && sha512sum -c one.txt >/dev/null ) || fatal "sha512 mismatch for caddy"
-  tar -xzf "$tmp/caddy.tgz" -C "$tmp" caddy
+  tar -xzf "$tmp/caddy_${CADDY_VERSION}_linux_amd64.tar.gz" -C "$tmp" caddy
   install -m 755 "$tmp/caddy" /usr/local/bin/caddy
   rm -rf "$tmp"
 
   id caddy >/dev/null 2>&1 || useradd --system --home-dir /var/lib/caddy --shell /usr/sbin/nologin caddy
   mkdir -p "$dir" /var/lib/caddy
+  chmod 755 "$dir"
   chown caddy:caddy /var/lib/caddy
 
   if [ -f "$dir/Caddyfile" ]; then

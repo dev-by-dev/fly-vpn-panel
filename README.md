@@ -2,6 +2,21 @@
 
 Web Control Panel for VPN — self-hosted panel (Go backend, embedded Svelte 5 SPA) managing xray (VLESS + XHTTP + Reality), users, subscriptions, traffic stats and routing.
 
+## Install on a server
+
+Requirements: Ubuntu 24.04 or CentOS Stream 9/10, x86_64, root, a domain with an A record pointing at the server, SSH on a known port.
+
+```sh
+curl -fsSL https://github.com/dev-by-dev/fly-vpn-panel/releases/latest/download/install.sh -o install.sh
+sudo bash install.sh
+```
+
+The script asks for the language (ru/en/de), the domain, an optional ACME e-mail and whether to open the firewall. It then installs the panel, xray, Caddy with a Let's Encrypt certificate and a systemd unit. Every step checks the current state, so running the same command again upgrades without touching data.
+
+Non-interactive: `sudo bash install.sh --yes --domain panel.example.org`. Other flags: `--lang en`, `--dry-run`, `--skip-dns`, `--skip-firewall`, `--force`.
+
+Manual install on other distributions: [docs/deploy-checklist.md](docs/deploy-checklist.md).
+
 ## Prerequisites
 
 - Go ≥ 1.27

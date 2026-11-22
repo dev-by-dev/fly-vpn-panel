@@ -1,4 +1,6 @@
-# flypanel — Deploy Checklist (anonymized)
+# Deploy checklist
+
+> Automatic install on Ubuntu 24.04 or CentOS Stream 9/10: see the release asset `install.sh` and the README. This document is the manual path and the reference for what the script does.
 
 Generic playbook for deploying flypanel on a dedicated Linux VPS. Real values
 (`<ENTRY_IP>`, `<PANEL_DOMAIN>`, `<EGRESS_IP>`, server alias, provider) live in
