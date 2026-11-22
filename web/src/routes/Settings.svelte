@@ -249,15 +249,19 @@
       </thead>
       <tbody>
         {#each tokens as t (t.id)}
-          <tr class="border-t border-sky-500/10">
+          <tr class="border-t border-sky-500/10" class:text-muted-foreground={t.revoked}>
             <td class="py-2">{t.name}</td>
             <td class="text-muted-foreground">{scopeLabel(t.scope)}</td>
             <td class="text-muted-foreground">{expiryLabel(t)}</td>
             <td class="text-right">
-              <button
-                class="text-xs text-muted-foreground hover:text-red-400"
-                onclick={() => revokeToken(t.id)}>Отозвать</button
-              >
+              {#if t.revoked}
+                <span class="text-xs text-muted-foreground">Отозван</span>
+              {:else}
+                <button
+                  class="text-xs text-muted-foreground hover:text-red-400"
+                  onclick={() => revokeToken(t.id)}>Отозвать</button
+                >
+              {/if}
             </td>
           </tr>
         {:else}

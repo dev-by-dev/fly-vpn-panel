@@ -79,7 +79,10 @@ func cookieOnly(r *http.Request) bool {
 
 // readDenied hides secrets a monitoring token has no business seeing.
 func readDenied(path string) bool {
-	if path == "/api/config" || path == "/api/config/routing" {
+	if path == "/api/inbounds/metrics" {
+		return false
+	}
+	if strings.HasPrefix(path, "/api/inbounds") || strings.HasPrefix(path, "/api/config") {
 		return true
 	}
 	return path == "/api/users" || strings.HasPrefix(path, "/api/users/")

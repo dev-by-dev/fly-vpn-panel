@@ -40,6 +40,8 @@ function mockFetch() {
       );
     }
     if (/^\/api\/tokens\/\d+$/.test(url) && init?.method === 'DELETE') {
+      const id = Number(url.split('/').pop());
+      tokens = tokens.map((t) => (t.id === id ? { ...t, revoked: true } : t));
       return Promise.resolve(new Response(null, { status: 204 }));
     }
     if (url === '/api/settings' && (!init || init.method === undefined || init.method === 'GET')) {
@@ -154,4 +156,7 @@ test('токены: «Отозвать» удаляет токен по id', asy
     expect(call).toBeTruthy();
     expect(call![1]!.method).toBe('DELETE');
   });
+
+  expect(await screen.findByText('Отозван')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Отозвать' })).toBeNull();
 });

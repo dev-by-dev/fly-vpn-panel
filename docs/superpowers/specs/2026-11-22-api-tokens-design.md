@@ -111,8 +111,9 @@ CREATE TABLE IF NOT EXISTS api_tokens (
   Валидация: `name` после trim 1–64 символа, `scope` ∈ {full,read},
   `expires_in_days` ∈ {0,30,90} (0 = бессрочно). Ошибка → 400
   `{"error":"invalid_token_request"}`.
-- `DELETE /api/tokens/{id}` → 204; неизвестный id → 404
-  `{"error":"not_found"}`. Отзыв идемпотентен (повторный → 204).
+- `DELETE /api/tokens/{id}` → 204; неизвестный или уже отозванный id → 404
+  `{"error":"not_found"}`. Повторный отзыв не идемпотентен: 404, чтобы UI
+  отличал «только что отозван» от «такого токена нет».
 
 Хендлеры — новый файл `internal/api/tokens.go`, тип `Handlers` уже несёт
 `Store`.
