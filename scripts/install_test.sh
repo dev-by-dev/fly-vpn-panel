@@ -157,6 +157,23 @@ FAMILY=apt
 check "new_packages skips installed" 0 "$(new_packages bash | grep -c .)"
 check "new_packages keeps missing" no-such-pkg-xyz "$(new_packages bash no-such-pkg-xyz)"
 
+# --- dry-run tolerates an unsupported os -------------------------------------
+cat > "$WORK/os-22" <<'EOF'
+ID=ubuntu
+VERSION_ID="22.04"
+PRETTY_NAME="Ubuntu 22.04.5 LTS"
+EOF
+IP=""
+OS_RELEASE_FILE="$WORK/os-22"
+DRY_RUN=true
+FORCE=false
+# preflight выходит из скрипта на неподдерживаемой ОС — гоняем в подоболочке
+( preflight; echo "FAMILY=$FAMILY" ) > "$WORK/pf.out" 2>&1
+check "dry-run survives an unsupported os" 0 $?
+check "dry-run previews with apt" apt "$(sed -n 's/^FAMILY=//p' "$WORK/pf.out")"
+DRY_RUN=false
+OS_RELEASE_FILE=/etc/os-release
+
 # --- system update ----------------------------------------------------------
 UPD=$WORK/update.log
 STUB=$WORK/stub

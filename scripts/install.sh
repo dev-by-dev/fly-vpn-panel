@@ -69,6 +69,7 @@ declare -A MSG_RU=(
   [ok]="готово"
   [skip]="пропущено"
   [dry]="[dry-run]"
+  [dry_preview]="Продолжаю в режиме просмотра: ничего не меняется."
   [admin_exists]="Админ уже создан — шаг пропущен."
   [done]="Готово. Панель: https://%s"
   [conn_title]="Доступ к панели:"
@@ -124,6 +125,7 @@ declare -A MSG_EN=(
   [ok]="ok"
   [skip]="skipped"
   [dry]="[dry-run]"
+  [dry_preview]="Continuing in preview mode: nothing is changed."
   [admin_exists]="Admin already exists — step skipped."
   [done]="Done. Panel: https://%s"
   [conn_title]="Panel access:"
@@ -179,6 +181,7 @@ declare -A MSG_DE=(
   [ok]="fertig"
   [skip]="übersprungen"
   [dry]="[dry-run]"
+  [dry_preview]="Weiter im Vorschaumodus: nichts wird geändert."
   [admin_exists]="Admin existiert bereits — Schritt übersprungen."
   [done]="Fertig. Panel: https://%s"
   [conn_title]="Panel-Zugang:"
@@ -381,18 +384,20 @@ preflight() {
   fi
   current=$(uname -m)
   if [ "$current" != "x86_64" ]; then
-    $FORCE || fatal "$(printf "$(t unsupported_os)" "$current (arch)")"
+    # dry-run осматривает любую машину: проблемы здесь — предупреждение, а не выход.
+    $DRY_RUN || $FORCE || fatal "$(printf "$(t unsupported_os)" "$current (arch)")"
   fi
   [ -d /run/systemd/system ] || {
-    $FORCE || fatal "$(t no_systemd)"
+    $DRY_RUN || $FORCE || fatal "$(t no_systemd)"
   }
   FAMILY=$(detect_family)
   if [ "$FAMILY" = unsupported ]; then
     if ! $FORCE; then
       local desc
       desc=$(. "$OS_RELEASE_FILE" 2>/dev/null && printf '%s %s' "${PRETTY_NAME:-unknown}" || echo unknown)
+      $DRY_RUN || { sayf unsupported_os "$desc"; exit 1; }
       sayf unsupported_os "$desc"
-      exit 1
+      say dry_preview
     fi
     FAMILY=apt
   fi
