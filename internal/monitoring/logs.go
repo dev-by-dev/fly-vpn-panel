@@ -2,6 +2,7 @@
 package monitoring
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -35,9 +36,14 @@ type Reader struct {
 	Run     Runner
 }
 
+// commandTimeout bounds journalctl: a wedged journal must not pin the handler.
+var commandTimeout = 10 * time.Second
+
 // RunCommand is the real Runner used by the panel.
 func RunCommand(name string, args ...string) ([]byte, error) {
-	return exec.Command(name, args...).Output()
+	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
+	defer cancel()
+	return exec.CommandContext(ctx, name, args...).Output()
 }
 
 // Read returns the last lines of the requested source: server (whole
@@ -57,7 +63,6 @@ func (r Reader) Read(source string, lines int) ([]Entry, error) {
 	}
 	return nil, fmt.Errorf("monitoring: invalid source %q", source)
 }
-
 
 type journalLine struct {
 	Timestamp string          `json:"__REALTIME_TIMESTAMP"`

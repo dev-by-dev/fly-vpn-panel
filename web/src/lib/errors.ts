@@ -13,6 +13,9 @@ const known: Record<string, Key> = {
   forbidden: 'errors.forbidden',
   bad_request: 'errors.bad_request',
   internal: 'errors.internal',
+  journal_unavailable: 'errors.journal_unavailable',
+  invalid_source: 'errors.invalid_source',
+  invalid_range: 'errors.invalid_range',
 };
 
 // Код с бэка переводим на клиенте; незнакомый код показываем как есть.

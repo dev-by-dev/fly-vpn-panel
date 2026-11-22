@@ -43,13 +43,14 @@
 	let caddyErr = $state('');
 
 	// uPlot живёт вне реактивности: данные заливаем императивно.
-	type Chart = { destroy(): void };
+	type Chart = { destroy(): void; setSize(size: { width: number; height: number }): void };
 	let UPlotMod: (new (conf: unknown, data: number[][], node: HTMLElement) => Chart) & {
 		paths: { spline(): unknown };
 	} | null = null;
 	let elA = $state<HTMLDivElement | null>(null);
 	let elB = $state<HTMLDivElement | null>(null);
 	let chartA: Chart | null = null;
+	let resize: ResizeObserver | null = null;
 	let chartB: Chart | null = null;
 
 	async function loadLogs() {
@@ -93,9 +94,9 @@
 		}
 	}
 
-	function chartOpts(labels: [string, string], fmt: (v: number) => string) {
+	function chartOpts(labels: [string, string], fmt: (v: number) => string, width: number) {
 		return {
-			width: 0,
+			width,
 			height: 200,
 			class: 'uplot-dark',
 			series: [
@@ -155,8 +156,17 @@
 		];
 		chartA?.destroy();
 		chartB?.destroy();
-		chartA = new UPlotMod(chartOpts([t('monitor.rps'), t('monitor.errors')], (v) => v.toFixed(2)), requests, a);
-		chartB = new UPlotMod(chartOpts([t('monitor.avgMs'), t('monitor.rssMb')], (v) => v.toFixed(1)), timing, b);
+		// uPlot берёт width буквально и сам не мерит контейнер.
+		const width = a.clientWidth || 600;
+		chartA = new UPlotMod(chartOpts([t('monitor.rps'), t('monitor.errors')], (v) => v.toFixed(2), width), requests, a);
+		chartB = new UPlotMod(chartOpts([t('monitor.avgMs'), t('monitor.rssMb')], (v) => v.toFixed(1), width), timing, b);
+		resize?.disconnect();
+		resize = new ResizeObserver(() => {
+			const w = a.clientWidth || 600;
+			chartA?.setSize({ width: w, height: 200 });
+			chartB?.setSize({ width: w, height: 200 });
+		});
+		resize.observe(a);
 	}
 
 	// Графики пересобираем при смене вида, диапазона и языка (легенда uPlot статична).
@@ -168,6 +178,8 @@
 		if (view !== 'caddy' || count === 0) return;
 		void buildCharts();
 		return () => {
+			resize?.disconnect();
+			resize = null;
 			chartA?.destroy();
 			chartB?.destroy();
 			chartA = null;

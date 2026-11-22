@@ -107,6 +107,10 @@ describe('monitoring page', () => {
     expect(screen.getByText('12.5')).toBeTruthy();
     expect(screen.getByText('55 МБ')).toBeTruthy();
     await waitFor(() => expect(configs.length).toBe(2));
+    // uPlot берёт width буквально: с нулём график рисуется в ноль пикселей.
+    for (const conf of configs) {
+      expect((conf as { width: number }).width).toBeGreaterThan(0);
+    }
   });
 
   test('без метрик caddy говорит, что данных нет', async () => {

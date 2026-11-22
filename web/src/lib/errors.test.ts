@@ -15,6 +15,15 @@ describe('errText', () => {
     setLang('ru');
   });
 
+  it('переводит коды мониторинга', () => {
+    setLang('ru');
+    expect(errText('journal_unavailable', 'Не удалось загрузить логи (502)')).toBe(
+      'Журнал systemd недоступен',
+    );
+    expect(errText('invalid_source')).toBe('Неизвестный источник логов');
+    expect(errText('invalid_range')).toBe('Неизвестный диапазон');
+  });
+
   it('неизвестный код отдаёт fallback, иначе сам код', () => {
     expect(errText('weird_code', 'Своё сообщение')).toBe('Своё сообщение');
     expect(errText('weird_code')).toBe('weird_code');

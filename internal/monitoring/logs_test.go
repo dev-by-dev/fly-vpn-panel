@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func journalFixture() []byte {
@@ -91,6 +92,15 @@ func TestReadClampsLines(t *testing.T) {
 		if !strings.Contains(strings.Join(args, " "), tc.want) {
 			t.Errorf("lines %d → args %q, want %q", tc.in, strings.Join(args, " "), tc.want)
 		}
+	}
+}
+
+func TestRunCommandTimeout(t *testing.T) {
+	old := commandTimeout
+	commandTimeout = 50 * time.Millisecond
+	defer func() { commandTimeout = old }()
+	if _, err := RunCommand("sleep", "1"); err == nil {
+		t.Fatal("RunCommand(sleep 1) = nil error, want timeout")
 	}
 }
 
