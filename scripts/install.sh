@@ -707,7 +707,6 @@ configure_selinux() {
   fi
   run semanage port -a -t http_port_t -p tcp 8443 2>/dev/null || run semanage port -m -t http_port_t -p tcp 8443
   run semanage port -a -t http_port_t -p tcp "$ACCESS_PORT" 2>/dev/null || run semanage port -m -t http_port_t -p tcp "$ACCESS_PORT"
-  run systemctl restart caddy flypanel
   ok
 }
 

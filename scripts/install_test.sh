@@ -195,6 +195,20 @@ check "update runs apt-get upgrade" 1 "$(grep -c 'upgrade' "$UPD")"
   update_system >/dev/null 2>&1 )
 check "no-update skips the upgrade" 0 "$(grep -c . "$UPD")"
 
+# --- selinux step ------------------------------------------------------------
+# configure_selinux must not restart units (caddy.service does not exist yet
+# at that point; the restart aborts the install under set -e).
+SL=$WORK/selstub; SEL_LOG=$WORK/sel.log; : >"$SEL_LOG"
+mkdir -p "$SL"
+printf '#!/bin/sh\necho Enforcing\n' >"$SL/getenforce"
+printf '#!/bin/sh\necho "$@" >>"%s"\n' "$SEL_LOG" >"$SL/semanage"
+printf '#!/bin/sh\necho "$@" >>"%s"\n' "$SEL_LOG" >"$SL/systemctl"
+chmod +x "$SL"/*
+( export PATH="$SL:$PATH" FAMILY=dnf DRY_RUN=false ACCESS_PORT=8443
+  configure_selinux >/dev/null 2>&1 )
+check "selinux step issues no restart" 0 "$(grep -c restart "$SEL_LOG")"
+check "selinux step labels both ports" 2 "$(grep -c http_port_t "$SEL_LOG")"
+
 # --- https pending ----------------------------------------------------------
 LOCAL=200
 PUB=000
