@@ -136,19 +136,22 @@ run() {
     printf '   %s %s\n' "$(t dry)" "$*"
     return 0
   fi
+  printf '   $ %s\n' "$*"
   "$@"
 }
 
 word_ok() { [ "${1:-}" = delete ]; }
 
-# quiet: run without output. The --dry-run line still shows, otherwise the
-# firewall and SELinux steps report "done" with nothing to see.
+# quiet: show the command and its output, ignore failures. The --dry-run line
+# still shows, otherwise the firewall and SELinux steps report "done" with
+# nothing to see.
 quiet() {
   if $DRY_RUN; then
     printf '   %s %s\n' "$(t dry)" "$*"
     return 0
   fi
-  "$@" >/dev/null 2>&1 || true
+  printf '   $ %s\n' "$*"
+  "$@" 2>&1 | sed 's/^/     /' || true
 }
 
 remove_path() { [ -e "$1" ] || return 0; run rm -rf "$1"; }

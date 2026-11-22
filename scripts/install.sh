@@ -25,6 +25,7 @@ IP=${IP:-}
 FAMILY=""
 SSH_PORT=""
 FIREWALL_FAILED=false
+ADMIN_PASSWORD=""
 ADMIN_FAILED=false
 PKG_NEW=""
 
@@ -46,6 +47,9 @@ declare -A MSG_RU=(
   [q_domain]="Домен панели (A-запись уже должна указывать на этот сервер): "
   [q_email]="E-mail для Let's Encrypt (можно пусто): "
   [q_admin]="Логин администратора [admin]: "
+  [q_password]="Пароль администратора панели (мин. 12 символов, ввод не виден): "
+  [pw_short]="Пароль короче 12 символов — попробуй ещё раз."
+  [already_running]="Установщик уже запущен в другом терминале. Дождись окончания."
   [q_firewall]="Настроить фаервол (SSH-порт %s, 80, 443, 8443)? [Y/n]: "
   [confirm]="Установить flypanel на %s для домена %s? [Y/n]: "
   [aborted]="Отменено."
@@ -91,6 +95,9 @@ declare -A MSG_EN=(
   [q_domain]="Panel domain (A record must already point here): "
   [q_email]="E-mail for Let's Encrypt (may be empty): "
   [q_admin]="Admin login [admin]: "
+  [q_password]="Panel admin password (min 12 chars, input hidden): "
+  [pw_short]="Password is shorter than 12 characters — try again."
+  [already_running]="The installer is already running in another terminal. Wait for it to finish."
   [q_firewall]="Configure firewall (SSH port %s, 80, 443, 8443)? [Y/n]: "
   [confirm]="Install flypanel on %s for %s? [Y/n]: "
   [aborted]="Aborted."
@@ -136,6 +143,9 @@ declare -A MSG_DE=(
   [q_domain]="Panel-Domain (A-Record muss hierher zeigen): "
   [q_email]="E-Mail für Let's Encrypt (kann leer sein): "
   [q_admin]="Admin-Login [admin]: "
+  [q_password]="Passwort des Panel-Administrators (min. 12 Zeichen, Eingabe verborgen): "
+  [pw_short]="Das Passwort ist kürzer als 12 Zeichen — bitte erneut."
+  [already_running]="Der Installer läuft bereits in einem anderen Terminal. Bitte warten."
   [q_firewall]="Firewall einrichten (SSH-Port %s, 80, 443, 8443)? [J/n]: "
   [confirm]="flypanel auf %s für %s installieren? [J/n]: "
   [aborted]="Abgebrochen."
@@ -209,6 +219,7 @@ run() {
     printf '   %s %s\n' "$(t dry)" "$*"
     return 0
   fi
+  printf '   $ %s\n' "$*"
   "$@"
 }
 
@@ -394,6 +405,31 @@ preflight() {
   SSH_PORT=$(detect_ssh_port)
 }
 
+# ask_password reads the admin password without echo. The value stays in a
+# shell variable: it never reaches argv (visible in ps) or the install log.
+ask_password() {
+  local pw
+  while :; do
+    printf '%s' "$(t q_password)" >&2
+    IFS= read -rs pw || pw=""
+    printf '\n' >&2
+    if [ "${#pw}" -lt 12 ]; then
+      say pw_short
+      continue
+    fi
+    ADMIN_PASSWORD=$pw
+    return 0
+  done
+}
+
+# panel_admin_exists reports whether the installed panel already has an admin,
+# so a re-run neither asks for a password nor overwrites the account.
+panel_admin_exists() {
+  local bin="$PANEL_DIR/bin/flypanel"
+  [ -x "$bin" ] || return 1
+  runuser -u flypanel -- env FLYPANEL_ENV="$PANEL_DIR/.env" "$bin" admin status >/dev/null 2>&1
+}
+
 collect_answers() {
   while [ -z "$DOMAIN" ]; do
     DOMAIN=$(ask "$(t q_domain)" "")
@@ -405,6 +441,9 @@ collect_answers() {
   [ -n "$EMAIL" ] || EMAIL=$(ask "$(t q_email)" "")
   ADMIN_NAME=$(ask "$(t q_admin)" "$ADMIN_NAME")
   [ -n "$ADMIN_NAME" ] || ADMIN_NAME=admin
+  if ! $ASSUME_YES && ! panel_admin_exists; then
+    ask_password
+  fi
   local fw
   fw=$(ask "$(printf "$(t q_firewall)" "$SSH_PORT")" "y")
   case $fw in [nN]*) SKIP_FIREWALL=true ;; esac
@@ -443,11 +482,12 @@ install_packages() {
   # were already on the machine.
   PKG_NEW=$(new_packages $pkgs)
   if $DRY_RUN; then printf '   %s packages via %s\n' "$(t dry)" "$FAMILY"; return; fi
+  printf '   -> %s\n' "$pkgs"
   if [ "$FAMILY" = apt ]; then
     DEBIAN_FRONTEND=noninteractive apt-get update -qq
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $pkgs
+    DEBIAN_FRONTEND=noninteractive apt-get install -y $pkgs
   else
-    dnf install -y -q $pkgs
+    dnf install -y $pkgs
     systemctl enable --now firewalld
   fi
   ok
@@ -465,7 +505,9 @@ create_user_dirs() {
 
 download() {
   local url=$1 dest=$2
-  curl -fsSL --max-time 120 "$url" -o "$dest" || fatal "$(printf "$(t err_download)" "$url")"
+  printf '   <- %s\n' "$url"
+  curl -fL --max-time 120 --silent --show-error "$url" -o "$dest" || fatal "$(printf "$(t err_download)" "$url")"
+  printf '   -> %s (%s)\n' "$dest" "$(du -h "$dest" | cut -f1)"
 }
 
 install_panel() {
@@ -481,10 +523,11 @@ install_panel() {
   download "https://github.com/$REPO/releases/latest/download/sha256sums.txt" "$tmp/sha256sums.txt"
   ( cd "$tmp" && mv flypanel flypanel-linux-amd64 \
     && grep ' flypanel-linux-amd64$' sha256sums.txt > sums.txt \
-    && sha256sum -c sums.txt >/dev/null ) || fatal "sha256 mismatch for flypanel-linux-amd64"
+    && sha256sum -c sums.txt ) || fatal "sha256 mismatch for flypanel-linux-amd64"
   install -o flypanel -g flypanel -m 755 "$tmp/flypanel-linux-amd64" "$PANEL_DIR/bin/flypanel.new"
   mv -f "$PANEL_DIR/bin/flypanel.new" "$PANEL_DIR/bin/flypanel"
   rm -rf "$tmp"
+  printf '   -> %s\n' "$PANEL_DIR/bin/flypanel"
   ok
 }
 
@@ -513,6 +556,7 @@ install_xray() {
   install -o flypanel -g flypanel -m 644 "$tmp/geoip.dat" "$PANEL_DIR/bin/geoip.dat"
   install -o flypanel -g flypanel -m 644 "$tmp/geosite.dat" "$PANEL_DIR/bin/geosite.dat"
   rm -rf "$tmp"
+  printf '   -> %s/bin/{xray,geoip.dat,geosite.dat}\n' "$PANEL_DIR"
   ok
 }
 
@@ -545,6 +589,7 @@ install_env() {
     return
   fi
   env_file_write "$PANEL_DIR/.env"
+  printf '   -> %s/.env\n' "$PANEL_DIR"
   chown flypanel:flypanel "$PANEL_DIR/.env"
   chown -R flypanel:flypanel "$PANEL_DIR/data" "$PANEL_DIR/logs" "$PANEL_DIR/backups"
   ok
@@ -581,6 +626,7 @@ EOF
   systemctl daemon-reload
   systemctl enable flypanel >/dev/null 2>&1 || true
   systemctl restart flypanel
+  printf '   -> %s\n' "$unit"
   ok
 }
 
@@ -748,6 +794,7 @@ EOF
   /usr/local/bin/caddy validate --config "$dir/Caddyfile" >/dev/null || fatal "caddy config invalid"
   systemctl enable caddy >/dev/null 2>&1 || true
   systemctl restart caddy
+  printf '   -> /usr/local/bin/caddy\n   -> %s/Caddyfile\n' "$dir"
   ok
 }
 
@@ -777,10 +824,15 @@ admin_step() {
     sayf admin_skip "$PANEL_DIR" "$PANEL_DIR"
     return
   fi
-  runuser -u flypanel -- env FLYPANEL_ENV="$PANEL_DIR/.env" "$bin" admin init "$ADMIN_NAME" || {
+  [ -n "$ADMIN_PASSWORD" ] || ask_password
+  # Flags before username: the flag package stops parsing at the first
+  # positional argument.
+  printf '%s\n' "$ADMIN_PASSWORD" |
+    runuser -u flypanel -- env FLYPANEL_ENV="$PANEL_DIR/.env" "$bin" admin init --password-stdin "$ADMIN_NAME" || {
     printf 'admin init failed\n' >&2
     ADMIN_FAILED=true
   }
+  ADMIN_PASSWORD=""
 }
 
 summary() {
@@ -800,6 +852,11 @@ main() {
   # Root before the log is opened: an unprivileged run must not print tee errors.
   if [ "$(id -u)" -ne 0 ] && ! $DRY_RUN; then
     sayf need_root "$0"; exit 1
+  fi
+  # One installer at a time: a second run scrambles the log and races on apt.
+  if ! $DRY_RUN; then
+    exec 9>/run/lock/flypanel-install.lock
+    flock -n 9 || { say already_running; exit 1; }
   fi
   echo "$(t welcome)"
   if ! $DRY_RUN; then
