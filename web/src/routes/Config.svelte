@@ -18,6 +18,12 @@
 
   onMount(async () => {
     void loadRouting();
+    await loadConfig();
+  });
+
+  async function loadConfig() {
+    error = '';
+    notGenerated = false;
     try {
       const res = await apiFetch('/api/config');
       if (res.status === 404) {
@@ -37,7 +43,7 @@
     } catch {
       error = 'Сеть недоступна';
     }
-  });
+  }
 
   async function loadRouting() {
     try {
@@ -58,6 +64,7 @@
   }
 
   function rCheck() {
+    rApplyMsg = '';
     try {
       JSON.parse(rText);
       rCheckOk = true;
@@ -69,12 +76,14 @@
   }
 
   async function rApply() {
+    rCheckMsg = '';
     rApplyMsg = '';
     try {
       const res = await apiFetch('/api/config/routing', { method: 'PUT', body: rText });
       if (res.ok) {
         rApplyOk = true;
         rApplyMsg = 'Применено';
+        await loadConfig();
         return;
       }
       rApplyOk = false;

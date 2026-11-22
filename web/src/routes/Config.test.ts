@@ -10,12 +10,13 @@ function json(body: string, status = 200) {
 
 let putBody = '';
 let routingStatus = 200;
+let configBody = '{"inbounds":[]}';
 
 function mockFetch() {
   vi.stubGlobal('fetch', vi.fn((input: string | URL, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? 'GET';
-    if (url === '/api/config') return json('{"inbounds":[]}');
+    if (url === '/api/config') return json(configBody);
     if (url === '/api/config/routing' && method === 'GET') {
       return routingStatus === 200 ? json(routing) : json('{"error":"internal"}', routingStatus);
     }
@@ -27,7 +28,7 @@ function mockFetch() {
   }));
 }
 
-beforeEach(() => { putBody = ''; routingStatus = 200; mockFetch(); });
+beforeEach(() => { putBody = ''; routingStatus = 200; configBody = '{"inbounds":[]}'; mockFetch(); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 test('показывает дефолтный routing в textarea', async () => {
@@ -65,4 +66,28 @@ test('ошибка загрузки routing не скрывает конфиг',
   render(Config);
   await screen.findByText('Не удалось загрузить routing (500)');
   expect(await screen.findByText(/inbounds/)).toBeTruthy();
+});
+
+test('502 после удачной проверки показывается вместо старого сообщения', async () => {
+  render(Config);
+  const ta = (await screen.findByLabelText('Routing JSON')) as HTMLTextAreaElement;
+  await waitFor(() => expect(ta.value).toContain('domainStrategy'));
+  await fireEvent.click(screen.getByRole('button', { name: 'Проверить' }));
+  await screen.findByText('JSON корректен');
+  vi.stubGlobal('fetch', vi.fn((input: string | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url === '/api/config') return json(configBody);
+    if (init?.method === 'PUT') return json('{"error":"xray_down"}', 502);
+    return json(routing);
+  }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Применить' }));
+  await screen.findByText('xray недоступен (502)');
+});
+
+test('успешное применение перечитывает конфиг', async () => {
+  render(Config);
+  await screen.findByText(/inbounds/);
+  configBody = '{"inbounds":[{"tag":"fresh"}]}';
+  await fireEvent.click(screen.getByRole('button', { name: 'Применить' }));
+  await screen.findByText(/fresh/);
 });
