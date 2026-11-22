@@ -17,6 +17,7 @@ FORCE=false
 ASSUME_YES=false
 SKIP_DNS=false
 SKIP_FIREWALL=false
+SKIP_UPDATE=false
 LANG_SEL=${LANG_SEL:-}
 DOMAIN=${DOMAIN:-}
 EMAIL=${EMAIL:-}
@@ -53,6 +54,7 @@ declare -A MSG_RU=(
   [q_firewall]="Настроить фаервол (SSH-порт %s, 80, 443, 8443)? [Y/n]: "
   [confirm]="Установить flypanel на %s для домена %s? [Y/n]: "
   [aborted]="Отменено."
+  [step_update]="Обновление системы"
   [step_packages]="Пакеты"
   [step_user]="Пользователь и каталоги"
   [step_panel]="Бинарь панели"
@@ -101,6 +103,7 @@ declare -A MSG_EN=(
   [q_firewall]="Configure firewall (SSH port %s, 80, 443, 8443)? [Y/n]: "
   [confirm]="Install flypanel on %s for %s? [Y/n]: "
   [aborted]="Aborted."
+  [step_update]="System update"
   [step_packages]="Packages"
   [step_user]="User and directories"
   [step_panel]="Panel binary"
@@ -149,6 +152,7 @@ declare -A MSG_DE=(
   [q_firewall]="Firewall einrichten (SSH-Port %s, 80, 443, 8443)? [J/n]: "
   [confirm]="flypanel auf %s für %s installieren? [J/n]: "
   [aborted]="Abgebrochen."
+  [step_update]="Systemaktualisierung"
   [step_packages]="Pakete"
   [step_user]="Benutzer und Verzeichnisse"
   [step_panel]="Panel-Binary"
@@ -235,6 +239,7 @@ parse_args() {
       --dry-run) DRY_RUN=true; shift ;;
       --skip-dns) SKIP_DNS=true; shift ;;
       --skip-firewall) SKIP_FIREWALL=true; shift ;;
+      --no-update) SKIP_UPDATE=true; shift ;;
       --force) FORCE=true; shift ;;
       -h|--help) usage; exit 0 ;;
       *) fatal "unknown argument: $1 (see --help)" ;;
@@ -246,7 +251,7 @@ usage() {
   cat <<'EOF'
 usage: install.sh [--lang ru|en|de] [--domain D] [--email E] [--admin NAME]
                   [--ip A.B.C.D] [--yes] [--dry-run] [--skip-dns]
-                  [--skip-firewall] [--force]
+                  [--skip-firewall] [--no-update] [--force]
 EOF
 }
 
@@ -470,6 +475,21 @@ confirm() {
   esac
 }
 
+update_system() {
+  step step_update
+  if $SKIP_UPDATE; then say skip; return; fi
+  # Полное обновление до установки: иначе свежая машина остаётся с ядром и
+  # openssl годовой давности. Отключается флагом --no-update.
+  if [ "$FAMILY" = apt ]; then
+    run env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get update -qq
+    run env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a \
+      apt-get -y -o Dpkg::Options::=--force-confold upgrade
+  else
+    run dnf -y upgrade --refresh
+  fi
+  ok
+}
+
 install_packages() {
   step step_packages
   local pkgs
@@ -506,7 +526,12 @@ create_user_dirs() {
 download() {
   local url=$1 dest=$2
   printf '   <- %s\n' "$url"
-  curl -fL --max-time 120 --silent --show-error "$url" -o "$dest" || fatal "$(printf "$(t err_download)" "$url")"
+  # Медленный канал не должен валить установку: 10 минут, 3 попытки, докачка.
+  # -C - продолжает недокачанный файл, sha256 всё равно проверяется после.
+  local opts=(-fL --connect-timeout 15 --max-time 600 --retry 3 --retry-delay 3
+    --retry-all-errors -C - --show-error)
+  if [ -t 2 ]; then opts+=(--progress-bar); else opts+=(--silent); fi
+  curl "${opts[@]}" "$url" -o "$dest" || fatal "$(printf "$(t err_download)" "$url")"
   printf '   -> %s (%s)\n' "$dest" "$(du -h "$dest" | cut -f1)"
 }
 
@@ -865,6 +890,7 @@ main() {
   preflight
   collect_answers
   confirm
+  update_system
   install_packages
   create_user_dirs
   install_panel

@@ -150,5 +150,24 @@ FAMILY=apt
 check "new_packages skips installed" 0 "$(new_packages bash | grep -c .)"
 check "new_packages keeps missing" no-such-pkg-xyz "$(new_packages bash no-such-pkg-xyz)"
 
+# --- system update ----------------------------------------------------------
+UPD=$WORK/update.log
+STUB=$WORK/stub
+mkdir -p "$STUB"
+cat > "$STUB/apt-get" <<'EOS'
+#!/bin/sh
+printf '%s\n' "$*" >> "$UPDATE_LOG"
+EOS
+chmod +x "$STUB/apt-get"
+: > "$UPD"
+( export UPDATE_LOG=$UPD PATH=$STUB:$PATH FAMILY=apt SKIP_UPDATE=false DRY_RUN=false
+  update_system >/dev/null 2>&1 )
+check "update runs apt-get update" 1 "$(grep -c '^update' "$UPD")"
+check "update runs apt-get upgrade" 1 "$(grep -c 'upgrade' "$UPD")"
+: > "$UPD"
+( export UPDATE_LOG=$UPD PATH=$STUB:$PATH FAMILY=apt SKIP_UPDATE=true DRY_RUN=false
+  update_system >/dev/null 2>&1 )
+check "no-update skips the upgrade" 0 "$(grep -c . "$UPD")"
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
