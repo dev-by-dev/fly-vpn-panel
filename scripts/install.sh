@@ -18,6 +18,7 @@ ASSUME_YES=false
 SKIP_DNS=false
 SKIP_FIREWALL=false
 SKIP_UPDATE=false
+HTTPS_PENDING=0
 LANG_SEL=${LANG_SEL:-}
 DOMAIN=${DOMAIN:-}
 EMAIL=${EMAIL:-}
@@ -79,6 +80,7 @@ declare -A MSG_RU=(
   [xray_keep]="Уже стоит другая версия xray (%s) — оставляю. Обновить: --force."
   [err_download]="Не удалось скачать %s"
   [https_fail]="HTTPS не поднялся за 90 с. Последние строки журнала Caddy:"
+  [https_warn]="Сертификат ещё не получен — Caddy повторит сам. Панель уже работает: http://127.0.0.1:3002/. Журнал: journalctl -u caddy -n 20"
   [update_hint]="Обновление: тот же скрипт повторно."
 )
 declare -A MSG_EN=(
@@ -128,6 +130,7 @@ declare -A MSG_EN=(
   [xray_keep]="Another xray version is installed (%s) — keeping it. Update: --force."
   [err_download]="Failed to download %s"
   [https_fail]="HTTPS did not come up in 90 s. Last Caddy log lines:"
+  [https_warn]="No certificate yet - Caddy keeps retrying. The panel already runs on http://127.0.0.1:3002/. Log: journalctl -u caddy -n 20"
   [update_hint]="Update: run the same script again."
 )
 declare -A MSG_DE=(
@@ -177,6 +180,7 @@ declare -A MSG_DE=(
   [xray_keep]="Andere xray-Version installiert (%s) — bleibt. Update: --force."
   [err_download]="Download fehlgeschlagen: %s"
   [https_fail]="HTTPS nach 90 s nicht erreichbar. Letzte Caddy-Logzeilen:"
+  [https_warn]="Noch kein Zertifikat - Caddy versucht es weiter. Das Panel läuft bereits auf http://127.0.0.1:3002/. Log: journalctl -u caddy -n 20"
   [update_hint]="Update: Skript erneut ausführen."
 )
 
@@ -832,6 +836,14 @@ wait_https() {
     if printf '%s' "$body" | grep -q 'assets/index-'; then ok; return; fi
     sleep 2
   done
+  # Панель может быть готова, а сертификат ещё нет: лимит Let's Encrypt,
+  # DNS-кеш, медленный ACME. Это не повод валить установку.
+  if [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 http://127.0.0.1:3002/ || true)" = 200 ]; then
+    say https_warn
+    journalctl -u caddy -n 8 --no-pager 2>/dev/null || true
+    HTTPS_PENDING=1
+    return 0
+  fi
   say https_fail
   journalctl -u caddy -n 20 --no-pager 2>/dev/null || true
   exit 1
@@ -865,6 +877,7 @@ summary() {
   sayf done "$DOMAIN"
   sayf log_path "$INSTALL_LOG"
   say update_hint
+  if [ "$HTTPS_PENDING" = 1 ]; then say https_warn; fi
   if ! $DRY_RUN && { $FIREWALL_FAILED || $ADMIN_FAILED; }; then
     printf '\nСмотри предупреждения выше.\n'
     exit 1

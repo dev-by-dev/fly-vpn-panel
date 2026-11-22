@@ -169,5 +169,25 @@ check "update runs apt-get upgrade" 1 "$(grep -c 'upgrade' "$UPD")"
   update_system >/dev/null 2>&1 )
 check "no-update skips the upgrade" 0 "$(grep -c . "$UPD")"
 
+# --- https pending ----------------------------------------------------------
+LOCAL=200
+PUB=000
+mkdir -p "$WORK/cstub"
+cat > "$WORK/cstub/curl" <<'EOS'
+#!/bin/sh
+for a in "$@"; do case $a in https://*) echo "$PUB" >&2; exit 22 ;; esac; done
+printf '%s' "$LOCAL"
+EOS
+chmod +x "$WORK/cstub/curl"
+printf '#!/bin/sh\nexit 0\n' > "$WORK/cstub/sleep"
+chmod +x "$WORK/cstub/sleep"
+pending=$( export PATH=$WORK/cstub:$PATH DOMAIN=panel.test DRY_RUN=false HTTPS_PENDING=0 PUB LOCAL
+  wait_https >/dev/null 2>&1; echo "$HTTPS_PENDING" )
+check "panel alive but no cert is not fatal" 1 "$pending"
+( export PATH=$WORK/cstub:$PATH DOMAIN=panel.test DRY_RUN=false HTTPS_PENDING=0 LOCAL=000 PUB=000
+  wait_https >/dev/null 2>&1 ) && rc=0 || rc=$?
+check "dead panel still fails" 1 "$rc"
+HTTPS_PENDING=0
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
