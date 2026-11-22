@@ -63,7 +63,7 @@ Someone else's Caddy configuration (sites that are not ours, a foreign global bl
 
 - not rolling back DNS/ACME certificates;
 - not deleting packages that were not there before the install, and not disabling someone else's firewall;
-- not working on foreign OSes: Ubuntu 22.04/24.04 / CentOS Stream 9-10, amd64 (same as the installer);
+- not working on foreign OSes: Ubuntu 22.04/24.04 / CentOS Stream 9-10, amd64 (same as the installer) — on anything else it warns and keeps going, where the installer refuses;
 - no “partial” removal by flags (except `--skip-firewall`).
 
 ## Verification
