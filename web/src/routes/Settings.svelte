@@ -225,7 +225,9 @@
 
 <h1 class="text-2xl font-semibold">Настройки</h1>
 
-<div class="mt-4 grid max-w-2xl grid-cols-1 gap-6">
+<div class="mt-4 grid max-w-5xl grid-cols-1 gap-6">
+  <!-- Токены и пароль рядом: обе карточки узкие, на широком экране делят строку -->
+  <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
   <!-- API tokens -->
   <section class="rounded-xl border border-sky-500/20 bg-sky-500/5 p-4">
     <div class="flex items-start gap-3">
@@ -349,6 +351,7 @@
       {/if}
     </div>
   </section>
+  </div>
 
   <!-- Poll interval -->
   <section class="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
